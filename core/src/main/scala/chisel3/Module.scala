@@ -160,6 +160,8 @@ package experimental {
     */
   // TODO: seal this?
   abstract class BaseModule extends HasId {
+    _parent.foreach(_.addId(this))
+
     //
     // Builder Internals - this tracks which Module RTL construction belongs to.
     //

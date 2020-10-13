@@ -353,7 +353,7 @@ abstract class Data extends HasId with NamedComponent with SourceInfoDoc {
     * node is the top-level.
     * binding and direction are valid after this call completes.
     */
-  private[chisel3] def bind(target: Binding, parentDirection: SpecifiedDirection = SpecifiedDirection.Unspecified)
+  private[chisel3] def bind(target: Binding, parentDirection: SpecifiedDirection = SpecifiedDirection.Unspecified): Unit
 
   // Both _direction and _resolvedUserDirection are saved versions of computed variables (for
   // efficiency, avoid expensive recomputation of frequent operations).
