@@ -44,15 +44,15 @@ private class Emitter(circuit: Circuit) {
     case d: Record => {
       val childClearDir = clearDir ||
           d.specifiedDirection == SpecifiedDirection.Input || d.specifiedDirection == SpecifiedDirection.Output
-      def eltPort(elt: Data): String = (childClearDir, firrtlUserDirOf(elt)) match {
+      def eltPort(name: String, elt: Data): String = (childClearDir, firrtlUserDirOf(elt)) match {
         case (true, _) =>
-          s"${elt.getRef.name} : ${emitType(elt, true)}"
+          s"$name : ${emitType(elt, true)}"
         case (false, SpecifiedDirection.Unspecified | SpecifiedDirection.Output) =>
-          s"${elt.getRef.name} : ${emitType(elt, false)}"
+          s"$name : ${emitType(elt, false)}"
         case (false, SpecifiedDirection.Flip | SpecifiedDirection.Input) =>
-          s"flip ${elt.getRef.name} : ${emitType(elt, false)}"
+          s"flip $name : ${emitType(elt, false)}"
       }
-      d.elements.toIndexedSeq.reverse.map(e => eltPort(e._2)).mkString("{", ", ", "}")
+      d.elements.toIndexedSeq.reverse.map(e => eltPort(e._1, e._2)).mkString("{", ", ", "}")
     }
   }
 

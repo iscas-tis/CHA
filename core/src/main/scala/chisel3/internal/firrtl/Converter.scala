@@ -235,14 +235,14 @@ private[chisel3] object Converter {
     case d: Record =>
       val childClearDir = clearDir ||
         d.specifiedDirection == SpecifiedDirection.Input || d.specifiedDirection == SpecifiedDirection.Output
-      def eltField(elt: Data): fir.Field = (childClearDir, firrtlUserDirOf(elt)) match {
-        case (true, _) => fir.Field(elt.getRef.name, fir.Default, extractType(elt, true))
+      def eltField(name: String, elt: Data): fir.Field = (childClearDir, firrtlUserDirOf(elt)) match {
+        case (true, _) => fir.Field(name, fir.Default, extractType(elt, true))
         case (false, SpecifiedDirection.Unspecified | SpecifiedDirection.Output) =>
-          fir.Field(elt.getRef.name, fir.Default, extractType(elt, false))
+          fir.Field(name, fir.Default, extractType(elt, false))
         case (false, SpecifiedDirection.Flip | SpecifiedDirection.Input) =>
-          fir.Field(elt.getRef.name, fir.Flip, extractType(elt, false))
+          fir.Field(name, fir.Flip, extractType(elt, false))
       }
-      fir.BundleType(d.elements.toIndexedSeq.reverse.map { case (_, e) => eltField(e) })
+      fir.BundleType(d.elements.toIndexedSeq.reverse.map { case (n, e) => eltField(n, e) })
     }
 
   def convert(name: String, param: Param): fir.Param = param match {
