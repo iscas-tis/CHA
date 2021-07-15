@@ -11,13 +11,18 @@ import scala.collection.mutable
 package object dataview {
   case class InvalidViewException(message: String) extends ChiselException(message)
 
-  // stdlib in 2.13 but not in 2.12
-  private def when[A](cond: Boolean, f: => A): Option[A] = if (cond) Some(f) else None
-
   private def nonTotalViewException(dataView: DataView[_, _], target: Any, view: Data, targetFields: Seq[String], viewFields: Seq[String]) = {
-    val vs = when(viewFields.nonEmpty, s"view field(s) '${viewFields.mkString(", ")}' are missing")
-    val ts = when(targetFields.nonEmpty, s"target field(s) '${targetFields.mkString(", ")}' are missing")
-    val reasons = (vs ++ ts).mkString(" and ").capitalize
+    def missingMsg(name: String, fields: Seq[String]): Option[String] = {
+      val str = fields.mkString(", ")
+      fields.size match {
+        case 0 => None
+        case 1 => Some(s"$name field '$str' is missing")
+        case _ => Some(s"$name fields '$str' are missing")
+      }
+    }
+    val vs = missingMsg("view", viewFields)
+    val ts = missingMsg("target", targetFields)
+    val reasons = (ts ++ vs).mkString(" and ").capitalize
     val suggestion = if (ts.nonEmpty) "\n  If the view *should* be non-total, try a 'PartialDataView'." else ""
     val msg = s"Viewing $target as $view is non-Total!\n  $reasons.\n  DataView used is $dataView.$suggestion"
     throw InvalidViewException(msg)

@@ -352,7 +352,20 @@ class DataViewSpec extends ChiselFlatSpec {
     val verilog = ChiselStage.emitVerilog(new MyModule)
   }
 
-  it should "error if a view is non-total" in {
+  it should "error if the mapping is non-total in the view" in {
+    class MyBundle(val foo: UInt, val bar: UInt) extends Bundle
+    implicit val dv = DataView[UInt, MyBundle](_ -> _.bar)
+    class MyModule extends Module {
+      val tpe = new MyBundle(UInt(8.W), UInt(8.W))
+      val in = IO(Input(UInt(8.W)))
+      val out = IO(Output(tpe))
+      out := in.viewAs(tpe)
+    }
+    val err = the [InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    err.toString should include ("View field '_.foo' is missing")
+  }
+
+  it should "error if the mapping is non-total in the target" in {
     import ProductDataProduct._
     implicit val dv = DataView[(UInt, UInt), UInt](_._1 -> _)
     class MyModule extends Module {
@@ -361,7 +374,34 @@ class DataViewSpec extends ChiselFlatSpec {
       out := (a, b).viewAs(UInt())
     }
     val err = the [InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
-    err.toString should include ("Target field(s) '_._2' are missing")
+    err.toString should include ("Target field '_._2' is missing")
+  }
+
+  behavior of "PartialDataView"
+
+  it should "still error if the mapping is non-total in the view" in {
+    class MyBundle(val foo: UInt, val bar: UInt) extends Bundle
+    implicit val dv = PartialDataView[UInt, MyBundle](_ -> _.bar)
+    class MyModule extends Module {
+      val tpe = new MyBundle(UInt(8.W), UInt(8.W))
+      val in = IO(Input(UInt(8.W)))
+      val out = IO(Output(tpe))
+      out := in.viewAs(tpe)
+    }
+    val err = the [InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    err.toString should include ("View field '_.foo' is missing")
+  }
+
+  it should "NOT error if the mapping is non-total in the target" in {
+    import ProductDataProduct._
+    implicit val dv = PartialDataView[(UInt, UInt), UInt](_._2 -> _)
+    class MyModule extends Module {
+      val a, b = IO(Input(UInt(8.W)))
+      val out = IO(Output(UInt(8.W)))
+      out := (a, b).viewAs(UInt())
+    }
+    val verilog = ChiselStage.emitVerilog(new MyModule)
+    verilog should include ("assign out = b;")
   }
 
   // TODO Tests to write

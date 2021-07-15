@@ -255,6 +255,74 @@ about it below](#dataproduct)).
 
 All of this is slated to be included the Chisel standard library.
 
+## Totality and PartialDataView
+
+A `DataView` is _total_ if all fields of the _Target_ type and all fields of the _View_ type are 
+included in the mapping.
+Chisel will error if a field is accidentally left out from a `DataView`.
+For example:
+
+```scala mdoc
+class BundleA extends Bundle {
+  val foo = UInt(8.W)
+  val bar = UInt(8.W)
+}
+class BundleB extends Bundle {
+  val fizz = UInt(8.W)
+}
+```
+
+```scala mdoc:crash
+{ // Using an extra scope here to avoid a bug in mdoc (documentation generation)
+// We forgot BundleA.foo in the mapping!
+implicit val myView = DataView[BundleA, BundleB](_.bar -> _.fizz)
+class BadMapping extends Module {
+   val in = IO(Input(new BundleA))
+   val out = IO(Output(new BundleB))
+   out := in.viewAs(new BundleB)
+}
+// We must run Chisel to see the error
+emitVerilog(new BadMapping)
+}
+```
+
+As that error suggests, if we *want* the view to be non-total, we can use a `PartialDataView`:
+
+```scala mdoc
+// A PartialDataView does not have to be total for the Target
+implicit val myView = PartialDataView[BundleA, BundleB](_.bar -> _.fizz)
+class PartialDataViewModule extends Module {
+   val in = IO(Input(new BundleA))
+   val out = IO(Output(new BundleB))
+   out := in.viewAs(new BundleB)
+}
+```
+
+```scala mdoc:verilog
+emitVerilog(new PartialDataViewModule)
+```
+
+Note that `DataViews` and `PartialDataViews` must **always** be total for the `View`.
+This has the consequence that `PartialDataViews` are **not** invertible in the same way `DataViews`
+are.
+
+For example:
+
+```scala mdoc:crash
+{ // Using an extra scope here to avoid a bug in mdoc (documentation generation)
+class PartialDataViewModule2 extends Module {
+   val in = IO(Input(new BundleA))
+   val out = IO(Output(new BundleB))
+   // Using the inverted version of the mapping
+   out.viewAs(new BundleA) := in
+}
+// We must run Chisel to see the error
+emitVerilog(new PartialDataViewModule2)
+}
+```
+
+As noted, the mapping must **always** be total for the `View`.
+
 ## Advanced Details
 
 `DataView` takes advantage of features of Scala that may be new to many users of Chisel—in particular
@@ -431,28 +499,8 @@ implicit val counterView = DataView[MyCounter, Valid[UInt]](_.value -> _.bits, _
 ```
 
 Why is this useful?
-It primarily exists to help users if they accidentally leave a field out of the mapping,
-or accidentally include a `Data` in the mapping that isn't actually a part of the `Target`.
+This is how Chisel is able to check for totality as [described above](#totality-and-partialdataview).
+In addition to checking if a user has left a field out of the mapping, it also allows Chisel to check
+if the user has included a `Data` in the mapping that isn't actually a part of the _target_ nor the
+_view_.
 
-For example, imagine we had forgotten to include `active` and `valid` in our `DataView`:
-
-```scala mdoc:invisible
-import chisel3.util.Valid
-```
-
-```scala mdoc:crash
-{ // Using an extra scope here to avoid a bug in mdoc (documentation generation)
-implicit val counterView = DataView[MyCounter, Valid[UInt]](_.value -> _.bits)
-class BadCounterModule extends Module {
-  val out = IO(Output(Valid(UInt())))
-  val counter = new MyCounter(8)
-  counter.inc()
-  out := counter.viewAs(Valid(UInt()))
-}
-// We must run Chisel to see the error
-emitVerilog(new BadCounterModule)
-}
-```
-
-As you can see, `DataProduct` allows Chisel to check that all fields of the Target type are included
-in the `DataView`!

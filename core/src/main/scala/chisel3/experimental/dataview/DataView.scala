@@ -22,7 +22,8 @@ sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
   override def toString: String = {
     val base = sourceInfo.makeMessage(x => x)
     val loc = if (base.nonEmpty) base else "@unknown"
-    s"DataView(defined $loc)"
+    val name = if (total) "DataView" else "PartialDataView"
+    s"$name(defined $loc)"
   }
 
   /** Compose two `DataViews` together to construct a view from the target of this `DataView` to the
@@ -58,9 +59,13 @@ private class RecordAsParentView[T <: Record, V <: Record](implicit ev: T <:< V,
     val keys = aElts.keysIterator.filter(bKeys.contains)
     keys.map(k => aElts(k) -> bElts(k)).toSeq
   },
+  // TODO can we make this total when T =:= V?
   total = false
 )
 
+/** Factory methods for constructing [[DataView]]s
+  *
+  */
 object DataView {
 
   def apply[T : DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
@@ -88,8 +93,8 @@ object DataView {
       if (!view.total) {
         val tt = implicitly[WeakTypeTag[T]].tpe
         val vv = implicitly[WeakTypeTag[V]].tpe
-        val msg = s"Cannot invert '$view' as it is non-total. Try providing a DataView[$vv, $tt]. " +
-          s"Please see <doc link>."
+        val msg = s"Cannot invert '$view' as it is non-total.\n  Try providing a DataView[$vv, $tt]." +
+          s"\n  Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview."
         throw InvalidViewException(msg)
       }
       implicit val sourceInfo = view.sourceInfo
@@ -97,7 +102,7 @@ object DataView {
     }
   }
 
-  private def swizzle[A, B, C, D](fs: Iterable[(A, B) => (C, D)]): (A, B) => Iterable[(C, D)] = {
+  private[dataview] def swizzle[A, B, C, D](fs: Iterable[(A, B) => (C, D)]): (A, B) => Iterable[(C, D)] = {
     case (a, b) => fs.map(f => f(a, b))
   }
 
@@ -146,4 +151,19 @@ object DataView {
       "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview#dataproduct."
     c.abort(c.enclosingPosition, msg)
   }
+}
+
+/** Factory methods for constructing non-total [[DataView]]s
+  *
+  */
+object PartialDataView {
+
+  def apply[T: DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    PartialDataView.pairs(pairs: _*)
+
+  def pairs[T: DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    mapping(DataView.swizzle(pairs))
+
+  def mapping[T: DataProduct, V <: Data](mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    new DataView[T, V](mapping, total = false)
 }
