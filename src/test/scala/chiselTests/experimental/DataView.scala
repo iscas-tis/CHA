@@ -361,7 +361,7 @@ class DataViewSpec extends ChiselFlatSpec {
       out := (a, b).viewAs(UInt())
     }
     val err = the [InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
-    err.toString should include ("target field(s) '_._2' are missing")
+    err.toString should include ("Target field(s) '_._2' are missing")
   }
 
   // TODO Tests to write

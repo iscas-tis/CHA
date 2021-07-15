@@ -11,9 +11,15 @@ import scala.collection.mutable
 package object dataview {
   case class InvalidViewException(message: String) extends ChiselException(message)
 
-  private def nonTotalViewException(view: Data, fields: Seq[String]) = {
-    val fs = fields.mkString(", ")
-    val msg = s"View of type $view is non-Total, target field(s) '$fs' are missing from the DataView"
+  // stdlib in 2.13 but not in 2.12
+  private def when[A](cond: Boolean, f: => A): Option[A] = if (cond) Some(f) else None
+
+  private def nonTotalViewException(dataView: DataView[_, _], target: Any, view: Data, targetFields: Seq[String], viewFields: Seq[String]) = {
+    val vs = when(viewFields.nonEmpty, s"view field(s) '${viewFields.mkString(", ")}' are missing")
+    val ts = when(targetFields.nonEmpty, s"target field(s) '${targetFields.mkString(", ")}' are missing")
+    val reasons = (vs ++ ts).mkString(" and ").capitalize
+    val suggestion = if (ts.nonEmpty) "\n  If the view *should* be non-total, try a 'PartialDataView'." else ""
+    val msg = s"Viewing $target as $view is non-Total!\n  $reasons.\n  DataView used is $dataView.$suggestion"
     throw InvalidViewException(msg)
   }
 
@@ -24,7 +30,9 @@ package object dataview {
   }
 
   // TODO should this be moved to class Aggregate / can it be unified with Aggregate.bind?
-  private def doBind[T : DataProduct, V <: Data](target: T, view: V, mapping: Iterable[(Data, Data)], total: Boolean): Unit = {
+  private def doBind[T : DataProduct, V <: Data](target: T, view: V, dataView: DataView[T, V]): Unit = {
+    val mapping = dataView.mapping(target, view)
+    val total = dataView.total
     // Lookups to check the mapping results
     val viewFieldLookup: Map[Data, String] = getRecursiveFields(view, "_").toMap
     val targetContains: Data => Boolean = implicitly[DataProduct[T]].dataSet(target)
@@ -83,18 +91,16 @@ package object dataview {
       data -> targetsx
     }.toMap
 
-
-
     // Check for totality of Target
     targetSeen.foreach { seen =>
       val lookup = implicitly[DataProduct[T]].dataIterator(target, "_")
-      for (missed <- lookup.collect { case (d, name) if !seen(d) => name }) {
+      for (missed <- lookup.collect { case (d: Element, name) if !seen(d) => name }) {
         targetNonTotalErrors = missed :: targetNonTotalErrors
       }
     }
     if (viewNonTotalErrors != Nil || targetNonTotalErrors != Nil) {
-      val allNonTotalErrors = targetNonTotalErrors ++ viewNonTotalErrors.map(f => viewFieldLookup.getOrElse(f, f.toString))
-      nonTotalViewException(view, allNonTotalErrors)
+      val viewErrors = viewNonTotalErrors.map(f => viewFieldLookup.getOrElse(f, f.toString))
+      nonTotalViewException(dataView, target, view, targetNonTotalErrors, viewErrors)
     }
 
     view.bind(AggregateViewBinding(resultBindings))
@@ -116,8 +122,7 @@ package object dataview {
       requireIsChiselType(view, "viewAs")
       val result: V = view.cloneTypeFull
 
-      val mapping = dataView.mapping(target, result)
-      doBind(target, result, mapping, dataView.total)
+      doBind(target, result, dataView)
       result
     }
   }
