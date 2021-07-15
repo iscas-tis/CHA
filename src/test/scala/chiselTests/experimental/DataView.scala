@@ -377,6 +377,44 @@ class DataViewSpec extends ChiselFlatSpec {
     err.toString should include ("Target field '_._2' is missing")
   }
 
+  it should "error if the mapping contains Data that are not part of the Target" in {
+    class BundleA extends Bundle {
+      val foo = UInt(8.W)
+    }
+    class BundleB extends Bundle {
+      val fizz = UInt(8.W)
+      val buzz = UInt(8.W)
+    }
+    implicit val dv = DataView[BundleA, BundleB](_.foo -> _.fizz, (_, b) => (3.U, b.buzz))
+    class MyModule extends Module {
+      val in = IO(Input(new BundleA))
+      val out = IO(Output(new BundleB))
+      out := in.viewAs(new BundleB)
+    }
+    // TODO more precise Exception type
+    val err = the [Exception] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    err.toString should include ("View mapping must only contain Elements within the Target")
+  }
+
+  it should "error if the mapping contains Data that are not part of the View" in {
+    class BundleA extends Bundle {
+      val foo = UInt(8.W)
+    }
+    class BundleB extends Bundle {
+      val fizz = UInt(8.W)
+      val buzz = UInt(8.W)
+    }
+    implicit val dv = DataView[BundleA, BundleB](_.foo -> _.fizz, (_, b) => (3.U, b.buzz))
+    class MyModule extends Module {
+      val in = IO(Input(new BundleA))
+      val out = IO(Output(new BundleB))
+      out.viewAs(new BundleA) := in
+    }
+    // TODO more precise Exception type
+    val err = the [Exception] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    err.toString should include ("View mapping must only contain Elements within the View")
+  }
+
   behavior of "PartialDataView"
 
   it should "still error if the mapping is non-total in the view" in {
