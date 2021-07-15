@@ -20,7 +20,7 @@ Often, this is useful for viewing one subtype of `chisel3.Data`, as another.
 One can think about a `DataView` as a mapping from a _Target_ type `T` to a _View_ type `V`.
 This is similar to a cast (eg. `.asTypeOf`) with a few differences:
 1. Views are _connectable_—connections to the view will occur on the target
-2. Whereas casts are _structural_ (a reinterpretation of the underling bits), a DataView is a customizable mapping
+2. Whereas casts are _structural_ (a reinterpretation of the underlying bits), a DataView is a customizable mapping
 3. Views can be _partial_—not every field in the target must be included in the mapping
 
 ## A Motivating Example (AXI4)
@@ -302,9 +302,9 @@ class PartialDataViewModule extends Module {
 emitVerilog(new PartialDataViewModule)
 ```
 
-Note that `DataViews` and `PartialDataViews` must **always** be total for the `View`.
-This has the consequence that `PartialDataViews` are **not** invertible in the same way `DataViews`
-are.
+While `PartialDataViews` need not be total for the _Target_, both `PartialDataViews` and `DataViews`
+must always be total for the _View_.
+This has the consequence that `PartialDataViews` are **not** invertible in the same way as `DataViews`.
 
 For example:
 
