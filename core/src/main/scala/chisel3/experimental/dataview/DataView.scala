@@ -12,7 +12,7 @@ import annotation.implicitNotFound
 // TODO what about views as the same type? What happens if the width or parameters are different?
 
 @implicitNotFound("Could not find implicit value for DataView[${T}, ${V}].\n" +
-  "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview#dataproduct")
+  "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview")
 sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
   private[chisel3] val mapping: (T, V) => Iterable[(Data, Data)],
   val total: Boolean

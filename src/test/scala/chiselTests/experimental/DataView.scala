@@ -290,10 +290,12 @@ class DataViewSpec extends ChiselFlatSpec {
       val a, b = IO(Input(new Foo(UInt(8.W))))
       val y, z = IO(Output(new Fizz(UInt(8.W))))
       y := a.viewAs(chiselTypeOf(y))
-      z := a.viewAs(new Bar(UInt(8.W))).viewAs(chiselTypeOf(z))
+      z := b.viewAs(new Bar(UInt(8.W)))
+            .viewAs(chiselTypeOf(z))
     }
     val chirrtl = ChiselStage.emitChirrtl(new MyModule)
-    println(chirrtl)
+    chirrtl should include ("y.fizz <= a.foo")
+    chirrtl should include ("z.fizz <= b.foo")
   }
 
   // This example should be turned into a built-in feature
@@ -332,7 +334,7 @@ class DataViewSpec extends ChiselFlatSpec {
     verilog should include ("assign z = c;")
   }
 
-  ignore should "support composition of views" in {
+  it should "support recursive composition of views" in {
     import ProductDataProduct._
     import SeqDataProduct._
     import HWTuple._
@@ -343,13 +345,18 @@ class DataViewSpec extends ChiselFlatSpec {
       }
 
     class MyModule extends Module {
-      val a, b, c, d = IO(Output(UInt(8.W)))
+      val a, b, c, d = IO(Input(UInt(8.W)))
+      val w, x, y, z = IO(Output(UInt(8.W)))
 
-      val v = Seq((a, b), (c, d)).viewAs(Vec(2, new HWTuple2(UInt(), UInt())))
+      val v = Seq((w, x), (y, z)).viewAs(Vec(2, new HWTuple2(UInt(), UInt())))
       // A little annoying that we need the type annotation to get the implicit conversion to work
-      v := VecInit[HWTuple2[UInt, UInt]]((0.U, 1.U), (2.U, 3.U))
+      v := VecInit[HWTuple2[UInt, UInt]]((a, b), (c, d))
     }
     val verilog = ChiselStage.emitVerilog(new MyModule)
+    verilog should include ("assign w = a;")
+    verilog should include ("assign x = b;")
+    verilog should include ("assign y = c;")
+    verilog should include ("assign z = d;")
   }
 
   it should "error if the mapping is non-total in the view" in {

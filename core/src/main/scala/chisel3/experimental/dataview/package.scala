@@ -7,6 +7,7 @@ import chisel3.internal.{AggregateViewBinding, TopBinding, ViewBinding, requireI
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.immutable.LazyList // Needed for 2.12 alias
 
 package object dataview {
   case class InvalidViewException(message: String) extends ChiselException(message)
@@ -49,31 +50,42 @@ package object dataview {
           .collect { case (elt: Element, _) => elt }
           .map(_ -> new mutable.ListBuffer[Element])
 
-    for ((ax, bx) <- mapping) {
+    def viewFieldName(d: Data): String =
+      viewFieldLookup.get(d).map(_ + " ").getOrElse("") + d.toString
+
+    // Helper for recording the binding of each
+    def onElt(te: Element, ve: Element): Unit = {
+      // TODO can/should we aggregate these errors?
       def err(name: String, arg: Data) =
         throw new Exception(s"View mapping must only contain Elements within the $name, got $arg")
-      val fieldName = viewFieldLookup.getOrElse(bx, err("View", bx))
-      if (!targetContains(ax)){ err("Target", ax) }
 
-      bx match {
-        // Special cased because getMatchedFields checks typeEquivalence on Elements (and is used in Aggregate path)
-        // Also saves object allocations on common case of Elements
-        case elt: Element =>
-          if (elt.getClass != ax.getClass) {  // TODO typeEquivalent is too strict because it checks width
-            throw new Exception(s"Field $fieldName $elt specified as view of non-type-equivalent value $ax")
-          }
-          childBindings(elt) += ax.asInstanceOf[Element]
+      // The elements may themselves be views, look through the potential chain of views for the Elements
+      // that are actually members of the target or view
+      val tex = unfoldView(te).find(targetContains).getOrElse(err("Target", te))
+      val vex = unfoldView(ve).find(viewFieldLookup.contains).getOrElse(err("View", ve))
 
-        case agg: Aggregate =>
-          if (!agg.typeEquivalent(ax)) {
-            throw new Exception(s"field $fieldName $agg specified with non-type-equivalent value $ax")
-          }
-          getMatchedFields(agg, ax).foreach {
-            case (belt: Element, aelt: Element) =>
-              childBindings(belt) += aelt
-            case _ => // Ignore matching of Aggregates
-          }
+      // TODO need to check widths but a less strict version than typeEquivalent
+      if (tex.getClass != vex.getClass) {
+        val fieldName = viewFieldName(vex)
+        throw new Exception(s"Field $fieldName specified as view of non-type-equivalent value $tex")
       }
+      childBindings(vex) += tex
+    }
+
+    mapping.foreach {
+      // Special cased because getMatchedFields checks typeEquivalence on Elements (and is used in Aggregate path)
+      // Also saves object allocations on common case of Elements
+      case (ae: Element, be: Element) => onElt(ae, be)
+
+      case (aa: Aggregate, ba: Aggregate) =>
+        if (!ba.typeEquivalent(aa)) {
+          val fieldName = viewFieldLookup(ba)
+          throw new Exception(s"field $fieldName specified as view of non-type-equivalent value $aa")
+        }
+        getMatchedFields(aa, ba).foreach {
+          case (aelt: Element, belt: Element) => onElt(aelt, belt)
+          case _ => // Ignore matching of Aggregates
+        }
     }
 
     // Errors in totality of the View, use var List to keep fast path cheap (no allocation)
@@ -111,15 +123,6 @@ package object dataview {
     view.bind(AggregateViewBinding(resultBindings))
   }
 
-  private def bindElt[A : DataProduct, B <: Element](a: A, b: B, mapping: Iterable[(Data, Data)]): Unit = {
-    mapping.toList match {
-      case (ax, `b`) :: Nil =>
-        // TODO Check that ax and b have the same type
-        b.bind(ViewBinding(ax.asInstanceOf[Element]))
-      case other => throw new Exception(s"Expected exactly 1 mapping, got $other")
-    }
-  }
-
   // TODO is this right place to put this?
   /** Provides `viewAs` for types that are supported as [[DataView]] targets */
   implicit class DataViewable[T : DataProduct](target: T) {
@@ -132,12 +135,17 @@ package object dataview {
     }
   }
 
-  /** Similar to [[reify]] but can be used on unbound and non-Element arguments
-    */
-  private def reifyOpt(data: Data): Data = data.topBindingOpt match {
-    case None => data
-    case Some(ViewBinding(target)) => reifyOpt(target)
-    case Some(_) => data
+  // Traces an Element that may (or may not) be a view until it no longer maps
+  // Inclusive of the argument
+  private def unfoldView(elt: Element): LazyList[Element] = {
+    def rec(e: Element): LazyList[Element] = e.topBindingOpt match {
+      case Some(ViewBinding(target)) => target #:: rec(target)
+      case Some(AggregateViewBinding(mapping)) =>
+        val target = mapping(e)
+        target #:: rec(target)
+      case Some(_) | None => LazyList.empty
+    }
+    elt #:: rec(elt)
   }
 
   /** Turn any [[Element]] that could be a View into a concrete Element
