@@ -5,7 +5,7 @@ package chisel3
 import chisel3.experimental.dataview.reify
 
 import scala.language.experimental.macros
-import chisel3.experimental.{Analog, DataMirror, FixedPoint, Interval}
+import chisel3.experimental.{Analog, BaseModule, DataMirror, FixedPoint, Interval}
 import chisel3.internal.Builder.pushCommand
 import chisel3.internal._
 import chisel3.internal.firrtl._
@@ -256,19 +256,19 @@ private[chisel3] object getRecursiveFields {
     case data: Element => Seq(data -> path)
   }
 
-//  def lazily(data: Data, path: String): LazyList[(Data, String)] = data match {
-//    case data: Record =>
-//      LazyList(data -> path) #:::
-//        data.elements.to(LazyList).flatMap { case (fieldName, fieldData) =>
-//          getRecursiveFields(fieldData, s"$path.$fieldName")
-//        }
-//    case data: Vec[_] =>
-//      LazyList(data -> path) #:::
-//        data.getElements.to(LazyList).zipWithIndex.flatMap { case (fieldData, fieldIndex) =>
-//          getRecursiveFields(fieldData, path = s"$path($fieldIndex)")
-//        }
-//    case data: Element => LazyList(data -> path)
-//  }
+  def lazily(data: Data, path: String): LazyList[(Data, String)] = data match {
+    case data: Record =>
+      LazyList(data -> path) #:::
+        data.elements.to(LazyList).flatMap { case (fieldName, fieldData) =>
+          getRecursiveFields(fieldData, s"$path.$fieldName")
+        }
+    case data: Vec[_] =>
+      LazyList(data -> path) #:::
+        data.getElements.to(LazyList).zipWithIndex.flatMap { case (fieldData, fieldIndex) =>
+          getRecursiveFields(fieldData, path = s"$path($fieldIndex)")
+        }
+    case data: Element => LazyList(data -> path)
+  }
 }
 
 // Returns pairs of corresponding fields between two Records of the same type
@@ -548,7 +548,7 @@ abstract class Data extends HasId with NamedComponent with SourceInfoDoc {
     topBindingOpt match {
       // DataView
       case Some(ViewBinding(target)) => reify(target).ref
-      case Some(AggregateViewBinding(viewMap)) =>
+      case Some(AggregateViewBinding(viewMap, _)) =>
         viewMap.get(this) match {
           case None => materializeWire() // FIXME FIRRTL doesn't have Aggregate Init expressions
           // This should not be possible, .topBinding should return a ViewBinding
@@ -578,6 +578,20 @@ abstract class Data extends HasId with NamedComponent with SourceInfoDoc {
         Node(this)
       case opt => throwException(s"internal error: unknown binding $opt in generating LHS ref")
     }
+  }
+
+
+  // Recursively set the parent of the start Data and any children (eg. in an Aggregate)
+  private[chisel3] def setAllParents(parent: Option[BaseModule]): Unit = {
+    def rec(data: Data): Unit = {
+      data._parent = parent
+      data match {
+      case _: Element =>
+      case agg: Aggregate =>
+        agg.getElements.foreach(rec)
+      }
+    }
+    rec(this)
   }
 
   private[chisel3] def width: Width

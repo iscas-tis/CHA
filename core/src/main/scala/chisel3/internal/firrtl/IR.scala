@@ -8,7 +8,7 @@ import chisel3.internal._
 import chisel3.internal.sourceinfo.SourceInfo
 import chisel3.experimental._
 import _root_.firrtl.{ir => firrtlir}
-import _root_.firrtl.PrimOps
+import _root_.firrtl.{PrimOps, RenameMap}
 
 import scala.collection.immutable.NumericRange
 import scala.math.BigDecimal.RoundingMode
@@ -789,4 +789,4 @@ abstract class Component extends Arg {
 case class DefModule(id: RawModule, name: String, ports: Seq[Port], commands: Seq[Command]) extends Component
 case class DefBlackBox(id: BaseBlackBox, name: String, ports: Seq[Port], topDir: SpecifiedDirection, params: Map[String, Param]) extends Component
 
-case class Circuit(name: String, components: Seq[Component], annotations: Seq[ChiselAnnotation] = Seq.empty)
+case class Circuit(name: String, components: Seq[Component], annotations: Seq[ChiselAnnotation], renames: RenameMap)

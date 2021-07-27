@@ -3,7 +3,7 @@
 package chisel3.experimental
 
 import chisel3._
-import chisel3.internal.{AggregateViewBinding, TopBinding, ViewBinding, requireIsChiselType}
+import chisel3.internal.{AggregateViewBinding, Builder, TopBinding, ViewBinding, ViewParent, requireIsChiselType}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -29,16 +29,15 @@ package object dataview {
     throw InvalidViewException(msg)
   }
 
-  // Safe for unbound
-  private def isView(d: Data): Boolean = d.topBindingOpt.exists {
-    case (_: ViewBinding | _: AggregateViewBinding) => true
-    case _ => false
-  }
+  // Safe for all Data
+  private def isView(d: Data): Boolean = d._parent.contains(ViewParent)
 
   // TODO should this be moved to class Aggregate / can it be unified with Aggregate.bind?
   private def doBind[T : DataProduct, V <: Data](target: T, view: V, dataView: DataView[T, V]): Unit = {
     val mapping = dataView.mapping(target, view)
-    val total = dataView.total
+    // We don't have a way to determine if a Record viewed as it's own type is total statically
+    def isRecordIdentityView = dataView.isInstanceOf[RecordAsParentView[_, _]] && target.asInstanceOf[Record].typeEquivalent(view)
+    val total = dataView.total || isRecordIdentityView
     // Lookups to check the mapping results
     val viewFieldLookup: Map[Data, String] = getRecursiveFields(view, "_").toMap
     val targetContains: Data => Boolean = implicitly[DataProduct[T]].dataSet(target)
@@ -120,7 +119,25 @@ package object dataview {
       nonTotalViewException(dataView, target, view, targetNonTotalErrors, viewErrors)
     }
 
-    view.bind(AggregateViewBinding(resultBindings))
+    view match {
+      case elt: Element => view.bind(ViewBinding(resultBindings(elt)))
+      case agg: Aggregate =>
+        // We record total Data mappings to provide a better .toTarget
+        val topt = target match {
+          case d: Data if total => Some(d)
+          case _ =>
+            // Record views that don't have the simpler .toTarget for later renaming
+            Builder.unnamedViews += view
+            None
+        }
+        // TODO We must also record children as unnamed, some could be namable but this requires changes to the Binding
+        getRecursiveFields.lazily(view, "_").foreach {
+          case (agg: Aggregate, _) if agg != view =>
+            Builder.unnamedViews += agg
+          case _ => // Do nothing
+        }
+        agg.bind(AggregateViewBinding(resultBindings, topt))
+    }
   }
 
   // TODO is this right place to put this?
@@ -131,6 +148,7 @@ package object dataview {
       val result: V = view.cloneTypeFull
 
       doBind(target, result, dataView)
+      result.setAllParents(Some(ViewParent))
       result
     }
   }
@@ -140,7 +158,7 @@ package object dataview {
   private def unfoldView(elt: Element): LazyList[Element] = {
     def rec(e: Element): LazyList[Element] = e.topBindingOpt match {
       case Some(ViewBinding(target)) => target #:: rec(target)
-      case Some(AggregateViewBinding(mapping)) =>
+      case Some(AggregateViewBinding(mapping, _)) =>
         val target = mapping(e)
         target #:: rec(target)
       case Some(_) | None => LazyList.empty
@@ -166,4 +184,24 @@ package object dataview {
       case ViewBinding(target) => reify(target, elt.topBinding)
       case _ => elt
     }
+
+    /** Determine the target of a View if it is a single Target
+      *
+      * @note An Aggregate may be a view of unrelated [[Data]] (eg. like a Seq or tuple) and thus this
+      *       there is no single Data representing the Target and this function will return None
+      * @return The single Data target of this view or None if a single Data doesn't exist
+      */
+    private[chisel3] def reifySingleData(data: Data): Option[Data] = {
+      val candidate: Option[Data] = data.topBindingOpt match {
+        case None => None
+        case Some(ViewBinding(target)) => Some(target)
+        case Some(AggregateViewBinding(_, t: Some[_])) => t
+        case Some(_) => None
+      }
+      candidate.flatMap { d =>
+        // Candidate may itself be a view, keep tracing in those cases
+        if (isView(d)) reifySingleData(d) else Some(d)
+      }
+    }
+
 }

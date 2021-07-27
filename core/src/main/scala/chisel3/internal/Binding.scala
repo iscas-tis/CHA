@@ -122,7 +122,11 @@ case class DontCareBinding() extends UnconstrainedBinding
 
 // Views currently only support 1:1 Element-level mappings
 private[chisel3] case class ViewBinding(target: Element) extends UnconstrainedBinding
-private[chisel3] case class AggregateViewBinding(childMap: Map[Data, Element]) extends UnconstrainedBinding
+/** Binding for Aggregate Views
+  * @param childMap Mapping from children of this view to each child's target
+  * @param target Optional Data this Aggregate views if the view is total and the target is a Data
+  */
+private[chisel3] case class AggregateViewBinding(childMap: Map[Data, Element], target: Option[Data]) extends UnconstrainedBinding
 
 
 sealed trait LitBinding extends UnconstrainedBinding with ReadOnlyBinding

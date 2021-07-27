@@ -51,7 +51,7 @@ sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
   *
   * This does a Stringly-typed mapping which is safe because we have a direct inheritance relationship
   */
-private class RecordAsParentView[T <: Record, V <: Record](implicit ev: T <:< V, sourceInfo: SourceInfo) extends DataView[T, V](
+private[dataview] class RecordAsParentView[T <: Record, V <: Record](implicit ev: T <:< V, sourceInfo: SourceInfo) extends DataView[T, V](
   { case (a, b) =>
     val aElts = a.elements
     val bElts = b.elements
@@ -135,6 +135,7 @@ object DataView {
   // Another option is to use low-priority implicits (aka macros) for identityView
   implicit def asParentRecord[T <: Record, V <: Record](implicit ev: T <:< V, sourceInfo: SourceInfo): DataView[T, V] =
     new RecordAsParentView[T, V]
+
 
   import scala.language.experimental.macros
   import scala.reflect.macros.blackbox.Context
