@@ -11,6 +11,7 @@ import chisel3.internal._
 import chisel3.internal.firrtl._
 import chisel3.internal.sourceinfo.{DeprecatedSourceInfo, SourceInfo, SourceInfoTransform, UnlocatableSourceInfo}
 
+import scala.collection.immutable.LazyList // Needed for 2.12 alias
 import scala.util.Try
 
 /** User-specified directions.
