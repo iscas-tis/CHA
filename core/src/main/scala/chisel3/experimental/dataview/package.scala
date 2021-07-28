@@ -192,12 +192,17 @@ package object dataview {
       * @return The single Data target of this view or None if a single Data doesn't exist
       */
     private[chisel3] def reifySingleData(data: Data): Option[Data] = {
-      val candidate: Option[Data] = data.topBindingOpt match {
-        case None => None
-        case Some(ViewBinding(target)) => Some(target)
-        case Some(AggregateViewBinding(_, t: Some[_])) => t
-        case Some(_) => None
-      }
+      val candidate: Option[Data] =
+        data.binding.collect { // First check if this is a total mapping of an Aggregate
+          case AggregateViewBinding(_, Some(t)) => t
+        }.orElse { // Otherwise look via top binding
+          data.topBindingOpt match {
+            case None => None
+            case Some(ViewBinding(target)) => Some(target)
+            case Some(AggregateViewBinding(lookup, _)) => lookup.get(data)
+            case Some(_) => None
+          }
+        }
       candidate.flatMap { d =>
         // Candidate may itself be a view, keep tracing in those cases
         if (isView(d)) reifySingleData(d) else Some(d)
