@@ -338,8 +338,10 @@ private[chisel3] class DynamicContext(val annotationSeq: AnnotationSeq) {
     */
   val aspectModule: mutable.HashMap[BaseModule, BaseModule] = mutable.HashMap.empty[BaseModule, BaseModule]
 
-  // Records views that do not correspond to a single ReferenceTarget and thus require renaming
+  // Views that do not correspond to a single ReferenceTarget and thus require renaming
   val unnamedViews: ArrayBuffer[Data] = ArrayBuffer.empty
+  // Views belong to a separate namespace (for renaming)
+  val viewNamespace = Namespace.empty
 
   // Set by object Module.apply before calling class Module constructor
   // Used to distinguish between no Module() wrapping, multiple wrappings, and rewrapping
@@ -393,6 +395,7 @@ private[chisel3] object Builder extends LazyLogging {
   def namingStack: NamingStack = dynamicContext.namingStack
 
   def unnamedViews: ArrayBuffer[Data] = dynamicContext.unnamedViews
+  def viewNamespace: Namespace = dynamicContext.viewNamespace
 
   // Puts a prefix string onto the prefix stack
   def pushPrefix(d: String): Unit = {
@@ -679,7 +682,6 @@ private[chisel3] object Builder extends LazyLogging {
     for (view <- unnamedViews) {
       val localTarget = view.toTarget
       val absTarget = view.toAbsoluteTarget
-      println(s"Unnamed view $view :: $localTarget :: $absTarget")
       val elts = getRecursiveFields.lazily(view, "")
         .collect { case (elt: Element, _) => elt }
       for (elt <- elts) {
@@ -688,7 +690,6 @@ private[chisel3] object Builder extends LazyLogging {
         renames.record(absTarget, targetOfView.toAbsoluteTarget)
       }
     }
-    renames.underlying.foreach(println)
     renames
   }
 

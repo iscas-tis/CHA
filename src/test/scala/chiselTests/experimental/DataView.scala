@@ -450,5 +450,6 @@ class DataViewSpec extends ChiselFlatSpec {
   }
 
   // TODO Tests to write
+  // Tuple of Tuples (which themselves would be views) -- this is related to composition and currently fails
   // Aggregate View on target side of another mapping where 1 field comes from outside (should error)
 }

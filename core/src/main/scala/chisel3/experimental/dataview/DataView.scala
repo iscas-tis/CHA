@@ -60,6 +60,7 @@ private[dataview] class RecordAsParentView[T <: Record, V <: Record](implicit ev
     keys.map(k => aElts(k) -> bElts(k)).toSeq
   },
   // TODO can we make this total when T =:= V?
+  // Currently we check dynamically during the viewAs binding operation
   total = false
 )
 

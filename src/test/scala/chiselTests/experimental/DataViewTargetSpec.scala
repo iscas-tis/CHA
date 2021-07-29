@@ -32,14 +32,10 @@ class DataViewTargetSpec extends ChiselFlatSpec {
     _.parentModName,
   )
 
-  var i = 0L
-
   // Check helpers
   private def checkAll(impl: Data, refs: String*): Unit = {
     refs.size should be (checks.size)
     for ((check, value) <- checks.zip(refs)) {
-      i += 1
-      println(s"[$i] ${check(impl)} should be $value")
       check(impl) should be (value)
     }
   }
@@ -118,7 +114,56 @@ class DataViewTargetSpec extends ChiselFlatSpec {
       out := inst.out
     }
     val (_, annos) = getFirrtlAndAnnos(new MyParent)
-    val pairs = annos.collect { case DummyAnno(t, idx) => (idx, t) }.sortBy(_._1)
-    pairs.foreach(println)
+    val pairs = annos.collect { case DummyAnno(t, idx) => (idx, t.toString) }.sortBy(_._1)
+    val expected = Seq(
+      0 -> "~MyParent|MyChild>out.foo",
+      // The child of the view that was itself an Aggregate got split because 1:1 is lacking here
+      1 -> "~MyParent|MyChild>out.foo[0]",
+      1 -> "~MyParent|MyChild>out.foo[1]",
+      2 -> "~MyParent|MyParent/inst:MyChild>out.foo",
+      3 -> "~MyParent|MyParent/inst:MyChild>out"
+    )
+    pairs should equal (expected)
+  }
+
+  it should "support annotating views that cannot be mapped to a single ReferenceTarget" in {
+    import HWTuple._
+    class MyBundle extends Bundle {
+      val a, b = Input(UInt(8.W))
+      val c, d = Output(UInt(8.W))
+    }
+    // Note that each use of a Tuple as Data causes an implicit conversion creating a View
+    class MyChild extends Module {
+      val io = IO(new MyBundle)
+      (io.c, io.d) := (io.a, io.b)
+      // The type annotations create the views via the implicit conversion
+      val view1: Data = (io.a, io.b)
+      val view2: Data = (io.c, io.d)
+      mark(view1, 0)
+      mark(view2, 1)
+      markAbs(view1, 2)
+      markAbs(view2, 3)
+      mark((io.b, io.d), 4) // Mix it up for fun
+    }
+    class MyParent extends Module {
+      val io = IO(new MyBundle)
+      val inst = Module(new MyChild)
+      io <> inst.io
+    }
+    val (_, annos) = getFirrtlAndAnnos(new MyParent)
+    val pairs = annos.collect { case DummyAnno(t, idx) => (idx, t.toString) }.sorted
+    val expected = Seq(
+      0 -> "~MyParent|MyChild>io.a",
+      0 -> "~MyParent|MyChild>io.b",
+      1 -> "~MyParent|MyChild>io.c",
+      1 -> "~MyParent|MyChild>io.d",
+      2 -> "~MyParent|MyParent/inst:MyChild>io.a",
+      2 -> "~MyParent|MyParent/inst:MyChild>io.b",
+      3 -> "~MyParent|MyParent/inst:MyChild>io.c",
+      3 -> "~MyParent|MyParent/inst:MyChild>io.d",
+      4 -> "~MyParent|MyChild>io.b",
+      4 -> "~MyParent|MyChild>io.d",
+    )
+    pairs should equal (expected)
   }
 }

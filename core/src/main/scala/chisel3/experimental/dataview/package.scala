@@ -35,7 +35,7 @@ package object dataview {
   // TODO should this be moved to class Aggregate / can it be unified with Aggregate.bind?
   private def doBind[T : DataProduct, V <: Data](target: T, view: V, dataView: DataView[T, V]): Unit = {
     val mapping = dataView.mapping(target, view)
-    // We don't have a way to determine if a Record viewed as it's own type is total statically
+    // We don't have a static way to determine if a Record viewed as it's own type is total (see RecordAsParentView)
     def isRecordIdentityView = dataView.isInstanceOf[RecordAsParentView[_, _]] && target.asInstanceOf[Record].typeEquivalent(view)
     val total = dataView.total || isRecordIdentityView
     // Lookups to check the mapping results
@@ -148,7 +148,12 @@ package object dataview {
       val result: V = view.cloneTypeFull
 
       doBind(target, result, dataView)
+      // Setting the parent marks these Data as Views
       result.setAllParents(Some(ViewParent))
+      // The names of views do not matter except for when a view is annotated. For Views that correspond
+      // To a single Data, we just forward the name of the Target. For Views that correspond to more
+      // than one Data, we return this assigned name but rename it in the Convert stage
+      result.forceName(None, "view", Builder.viewNamespace)
       result
     }
   }
