@@ -156,7 +156,7 @@ This means that we can easily create a `DataView[AXIBundle, VerilogAXIBundle]` f
 `DataView[VerilogAXIBundle, AXIBundle]`, all we need to do is provide a function to construct
 a `VerilogAXIBundle` from an instance of an `AXIBundle`:
 
-```scala mdoc:passthrough
+```scala mdoc:silent
 // Note that typically you should define these together (eg. inside object AXIBundle)
 implicit val axiView2 = AXIBundle.axiView.invert(ab => new VerilogAXIBundle(ab.addrWidth))
 ```
