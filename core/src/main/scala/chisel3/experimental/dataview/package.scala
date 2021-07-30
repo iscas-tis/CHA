@@ -13,11 +13,6 @@ import scala.collection.immutable.LazyList // Needed for 2.12 alias
 package object dataview {
   case class InvalidViewException(message: String) extends ChiselException(message)
 
-  // This private type alias lets us provide a custom error message for misuing the .viewAs for upcasting Bundles
-  @implicitNotFound("${A} is not a subtype of ${B}! Did you mean .viewAs[${B}]? " +
-    "Please see https://www.chisel-lang.org/chisel3/docs/cookbooks/dataview")
-  private type SubTypeOf[A, B] = A <:< B
-
   // TODO is this right place to put this?
   /** Provides `viewAs` for types that are supported as [[DataView]] targets */
   implicit class DataViewable[T : DataProduct](target: T) {
@@ -40,11 +35,17 @@ package object dataview {
       result.forceName(None, "view", Builder.viewNamespace)
       result
     }
+  }
 
-    // TODO should this have a different name? .viewAsParent?
+  // This private type alias lets us provide a custom error message for misuing the .viewAs for upcasting Bundles
+  @implicitNotFound("${A} is not a subtype of ${B}! Did you mean .viewAs[${B}]? " +
+    "Please see https://www.chisel-lang.org/chisel3/docs/cookbooks/dataview")
+  private type SubTypeOf[A, B] = A <:< B
+
+  implicit class BundleUpcastable[T <: Bundle](target: T) {
     /** View a [[Bundle]] or [[Record]] as a parent type (upcast)
       */
-    def viewAs[V <: Record](proto: V)(implicit ev: SubTypeOf[T, V], sourceInfo: SourceInfo): V = {
+    def viewAsSupertype[V <: Bundle](proto: V)(implicit ev: SubTypeOf[T, V], sourceInfo: SourceInfo): V = {
       implicit val dataView = PartialDataView.mapping[T, V](_ => proto, {
         case (a, b) =>
           val aElts = a.elements

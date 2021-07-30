@@ -52,12 +52,13 @@ object HWTuple {
   implicit def view[T1 : DataProduct, T2 : DataProduct, V1 <: Data, V2 <: Data](
     implicit v1: DataView[T1, V1], v2: DataView[T2, V2]
   ): DataView[(T1, T2), HWTuple2[V1, V2]] =
-    DataView.mapping({
-      case (a, b) => new HWTuple2(a.viewAs[V1].cloneType, b.viewAs[V2].cloneType)
-    }, { case ((a, b), hwt) =>
-      Seq(a.viewAs[V1] -> hwt._1,
-          b.viewAs[V2] -> hwt._2)
-   })
+    DataView.mapping(
+      { case (a, b) => new HWTuple2(a.viewAs[V1].cloneType, b.viewAs[V2].cloneType)},
+      { case ((a, b), hwt) =>
+          Seq(a.viewAs[V1] -> hwt._1,
+              b.viewAs[V2] -> hwt._2)
+      }
+    )
 
   implicit def tuple2hwtuple[T1 : DataProduct, T2 : DataProduct, V1 <: Data, V2 <: Data](
     tup: (T1, T2))(implicit v1: DataView[T1, V1], v2: DataView[T2, V2]
@@ -210,11 +211,11 @@ class DataViewSpec extends ChiselFlatSpec {
     class MyModule extends Module {
       val fooIn = IO(Input(new Foo))
       val barOut = IO(Output(new Bar))
-      barOut.viewAs(new Foo) := fooIn
+      barOut.viewAsSupertype(new Foo) := fooIn
 
       val barIn = IO(Input(new Bar))
       val fooOut = IO(Output(new Foo))
-      fooOut := barIn.viewAs(new Foo)
+      fooOut := barIn.viewAsSupertype(new Foo)
     }
     val chirrtl = ChiselStage.emitChirrtl(new MyModule)
     chirrtl should include("barOut.foo <= fooIn.foo")
@@ -352,11 +353,12 @@ class DataViewSpec extends ChiselFlatSpec {
         { case (s: Seq[A], v: Vec[A]) => s.zip(v) }
       )
 
+    implicit def seqToVec[A <: Data](xs: Seq[A]): Vec[A] = xs.viewAs[Vec[A]]
+
     class MyModule extends Module {
       val a, b, c = IO(Input(UInt(8.W)))
       val x, y, z = IO(Output(UInt(8.W)))
-      val asSeq = Seq(x, y, z).viewAs[Vec[UInt]]
-      asSeq := VecInit(a, b, c)
+      Seq(x, y, z) := VecInit(a, b, c)
     }
     // Verilog instead of CHIRRTL because the optimizations make it much prettier
     val verilog = ChiselStage.emitVerilog(new MyModule)

@@ -100,7 +100,7 @@ which allows them to be connected.
 
 ### How do I view a Bundle as a parent type (superclass)?
 
-For viewing `Bundles` as the type of the parent, it is as simple as using `viewAs` and providing a
+For viewing `Bundles` as the type of the parent, it is as simple as using `viewAsSupertype` and providing a
 template object of the parent type:
 
 ```scala mdoc:silent:reset
@@ -116,7 +116,7 @@ class Bar extends Foo {
 class MyModule extends Module {
   val foo = IO(Input(new Foo))
   val bar = IO(Output(new Bar))
-  bar.viewAs(new Foo) := foo // bar.foo := foo.foo
+  bar.viewAsSupertype(new Foo) := foo // bar.foo := foo.foo
   bar.bar := 123.U           // all fields need to be connected
 }
 ```
@@ -152,7 +152,7 @@ A straightforward approach might run into an issue like the following:
 class MyModule extends Module {
   val foo = IO(Input(new Foo(8)))
   val bar = IO(Output(new Bar(8)))
-  bar.viewAs(new Super) := foo.viewAs(new Super)
+  bar.viewAsSupertype(new Super) := foo.viewAsSupertype(new Super)
 }
 ```
 
@@ -168,7 +168,7 @@ class MyModule extends Module {
   val tpe = new Super { // Adding curly braces creates an anonymous class
     def bitwidth = 8 // We must implement any abstract methods
   }
-  bar.viewAs(tpe) := foo.viewAs(tpe)
+  bar.viewAsSupertype(tpe) := foo.viewAsSupertype(tpe)
 }
 ```
 By adding curly braces after the name of the trait, we're telling Scala to create a new concrete
