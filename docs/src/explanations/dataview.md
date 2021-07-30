@@ -44,11 +44,11 @@ module my_module(
 This would correspond to the following Chisel Bundle:
 
 ```scala mdoc
-class VerilogAXIBundle extends Bundle {
+class VerilogAXIBundle(val addrWidth: Int) extends Bundle {
   val AWVALID = Output(Bool())
   val AWREADY = Input(Bool())
   val AWID = Output(UInt(4.W))
-  val AWADDR = Output(UInt(20.W))
+  val AWADDR = Output(UInt(addrWidth.W))
   val AWLEN = Output(UInt(2.W))
   val AWSIZE = Output(UInt(2.W))
   // The rest of AW and other AXI channels here
@@ -56,7 +56,7 @@ class VerilogAXIBundle extends Bundle {
 
 // Instantiated as
 class my_module extends RawModule {
-  val AXI = IO(new VerilogAXIBundle)
+  val AXI = IO(new VerilogAXIBundle(20))
 }
 ```
 
@@ -68,23 +68,23 @@ A more "Chisel-y" implementation of this interface might look like:
 
 ```scala mdoc
 // Note that both the AW and AR channels look similar and could use the same Bundle definition
-class AXIAddressChannel extends Bundle {
+class AXIAddressChannel(val addrWidth: Int) extends Bundle {
   val id = UInt(4.W)
-  val addr = UInt(20.W)
+  val addr = UInt(addrWidth.W)
   val len = UInt(2.W)
   val size = UInt(2.W)
   // ...
 }
 import chisel3.util.Decoupled
 // We can compose the various AXI channels together
-class AXIBundle extends Bundle {
-  val aw = Decoupled(new AXIAddressChannel)
+class AXIBundle(val addrWidth: Int) extends Bundle {
+  val aw = Decoupled(new AXIAddressChannel(addrWidth))
   // val ar = new AXIAddressChannel
   // ... Other channels here ...
 }
 // Instantiated as
 class MyModule extends RawModule {
-  val axi = IO(new AXIBundle)
+  val axi = IO(new AXIBundle(20))
 }
 ```
 
@@ -107,6 +107,10 @@ import chisel3.experimental.dataview._
 object AXIBundle {
   // Don't be afraid of the use of implicits, we will discuss this pattern in more detail later
   implicit val axiView = DataView[VerilogAXIBundle, AXIBundle](
+    // The first argument is a function constructing an object of View type (AXIBundle)
+    // from an object of the Target type (VerilogAXIBundle)
+    vab => new AXIBundle(vab.addrWidth),
+    // The remaining arguments are a mapping of the corresponding fields of the two types
     _.AWVALID -> _.aw.valid,
     _.AWREADY -> _.aw.ready,
     _.AWID -> _.aw.bits.id,
@@ -118,18 +122,18 @@ object AXIBundle {
 }
 ```
 
-This `DataView` is a _bidirectional_ mapping between our flat, Verilog-style AXI Bundle and our more
-compositional, Chisel-style AXI Bundle.
+This `DataView` is a mapping between our flat, Verilog-style AXI Bundle to our more compositional,
+Chisel-style AXI Bundle.
 It allows us to define our ports to match the expected Verilog interface, while manipulating it as if
 it were the more structured type:
 
 ```scala mdoc
 class AXIStub extends RawModule {
-  val AXI = IO(new VerilogAXIBundle)
-  val view = AXI.viewAs(new AXIBundle)
+  val AXI = IO(new VerilogAXIBundle(20))
+  val view = AXI.viewAs[AXIBundle]
 
   // We can now manipulate `AXI` via `view`
-  view.aw.bits := 0.U.asTypeOf(new AXIAddressChannel) // zero everything out by default
+  view.aw.bits := 0.U.asTypeOf(new AXIAddressChannel(20)) // zero everything out by default
   view.aw.valid := true.B
   when (view.aw.ready) {
     view.aw.bits.id := 5.U
@@ -147,16 +151,24 @@ emitVerilog(new AXIStub)
 ```
 
 Note that if both the _Target_ and the _View_ types are subtypes of `Data` (as they are in this example),
-the `DataView` is _invertible_. This means that in addition to viewing `VerilogAXIBundles` as `AXIBundles`,
-we can view `AXIBundles` as `VerilogAXIBundles`.
+the `DataView` is _invertible_.
+This means that we can easily create a `DataView[AXIBundle, VerilogAXIBundle]` from our existing
+`DataView[VerilogAXIBundle, AXIBundle]`, all we need to do is provide a function to construct
+a `VerilogAXIBundle` from an instance of an `AXIBundle`:
+
+```scala mdoc:passthrough
+// Note that typically you should define these together (eg. inside object AXIBundle)
+implicit val axiView2 = AXIBundle.axiView.invert(ab => new VerilogAXIBundle(ab.addrWidth))
+```
+
 The following example shows this and illustrates another use case of `DataView`—connecting unrelated
 types:
 
 ```scala mdoc
 class ConnectionExample extends RawModule {
-  val in = IO(new AXIBundle)
-  val out = IO(Flipped(new VerilogAXIBundle))
-  out.viewAs(new AXIBundle) <> in
+  val in = IO(new AXIBundle(20))
+  val out = IO(Flipped(new VerilogAXIBundle(20)))
+  out.viewAs[AXIBundle] <> in
 }
 ```
 
@@ -209,9 +221,10 @@ implicit val productDataProduct: DataProduct[Product] = new DataProduct[Product]
 // We need a type to represent the Tuple
 class HWTuple2[A <: Data, B <: Data](val _1: A, val _2: B) extends Bundle
 
-// Provide DataView mapping between Tuple and HWTuple
+// Provide DataView between Tuple and HWTuple
 implicit def view[A <: Data, B <: Data]: DataView[(A, B), HWTuple2[A, B]] =
-  DataView(_._1 -> _._1, _._2 -> _._2)
+  DataView(tup => new HWTuple2(tup._1.cloneType, tup._2.cloneType),
+           _._1 -> _._1, _._2 -> _._2)
 ```
 
 Now, we can use `.viewAs` to view Tuples as if they were subtypes of `Data`:
@@ -221,8 +234,7 @@ class TupleVerboseExample extends RawModule {
   val a, b, c, d = IO(Input(UInt(8.W)))
   val cond = IO(Input(Bool()))
   val x, y = IO(Output(UInt(8.W)))
-  val tupleTpe = new HWTuple2(UInt(), UInt())
-  (x, y).viewAs(tupleTpe) := Mux(cond, (a, b).viewAs(tupleTpe), (c, d).viewAs(tupleTpe))
+  (x, y).viewAs[HWTuple2[UInt, UInt]] := Mux(cond, (a, b).viewAs[HWTuple2[UInt, UInt]], (c, d).viewAs[HWTuple2[UInt, UInt]])
 }
 ```
 
@@ -231,7 +243,7 @@ We can make this better by providing an implicit conversion that views a `Tuple`
 
 ```scala mdoc
 implicit def tuple2hwtuple[A <: Data, B <: Data](tup: (A, B)): HWTuple2[A, B] =
-  tup.viewAs(new HWTuple2(tup._1.cloneType, tup._2.cloneType))
+  tup.viewAs[HWTuple2[A, B]]
 ```
 
 Now, the original code just works!
@@ -275,11 +287,11 @@ class BundleB extends Bundle {
 ```scala mdoc:crash
 { // Using an extra scope here to avoid a bug in mdoc (documentation generation)
 // We forgot BundleA.foo in the mapping!
-implicit val myView = DataView[BundleA, BundleB](_.bar -> _.fizz)
+implicit val myView = DataView[BundleA, BundleB](_ => new BundleB, _.bar -> _.fizz)
 class BadMapping extends Module {
    val in = IO(Input(new BundleA))
    val out = IO(Output(new BundleB))
-   out := in.viewAs(new BundleB)
+   out := in.viewAs[BundleB]
 }
 // We must run Chisel to see the error
 emitVerilog(new BadMapping)
@@ -290,11 +302,11 @@ As that error suggests, if we *want* the view to be non-total, we can use a `Par
 
 ```scala mdoc
 // A PartialDataView does not have to be total for the Target
-implicit val myView = PartialDataView[BundleA, BundleB](_.bar -> _.fizz)
+implicit val myView = PartialDataView[BundleA, BundleB](_ => new BundleB, _.bar -> _.fizz)
 class PartialDataViewModule extends Module {
    val in = IO(Input(new BundleA))
    val out = IO(Output(new BundleB))
-   out := in.viewAs(new BundleB)
+   out := in.viewAs[BundleB]
 }
 ```
 
@@ -310,11 +322,12 @@ For example:
 
 ```scala mdoc:crash
 { // Using an extra scope here to avoid a bug in mdoc (documentation generation)
+implicit val myView2 = myView.invert(_ => new BundleA)
 class PartialDataViewModule2 extends Module {
    val in = IO(Input(new BundleA))
    val out = IO(Output(new BundleB))
    // Using the inverted version of the mapping
-   out.viewAs(new BundleA) := in
+   out.viewAs[BundleA] := in
 }
 // We must run Chisel to see the error
 emitVerilog(new PartialDataViewModule2)
@@ -390,7 +403,7 @@ To help clarify a bit, let us consider how implicit resolution works for `DataVi
 Consider the definition of `viewAs`:
 
 ```scala
-def viewAs[V <: Data](view: V)(implicit dataView: DataView[T, V]): V
+def viewAs[V <: Data](implicit dataView: DataView[T, V]): V
 ```
 
 Armed with the knowledge from the previous section, we know that whenever we call `.viewAs`, the
@@ -414,7 +427,8 @@ class Bar extends Bundle {
   val d = UInt(8.W)
 }
 object Foo {
-  implicit val view = DataView[Foo, Bar](_.a -> _.c, _.b -> _.d)
+  implicit val f2b = DataView[Foo, Bar](_ => new Bar, _.a -> _.c, _.b -> _.d)
+  implicit val b2f = f2b.invert(_ => new Foo)
 }
 ```
 
@@ -425,7 +439,7 @@ This provides an implementation of `DataView` in the _implicit scope_ as a "defa
 class FooToBar extends Module {
   val foo = IO(Input(new Foo))
   val bar = IO(Output(new Bar))
-  bar := foo.viewAs(new Bar)
+  bar := foo.viewAs[Bar]
 }
 ```
 
@@ -438,14 +452,14 @@ perhaps they would prefer more of "swizzling" behavior rather than a direct mapp
 
 ```scala mdoc
 object Swizzle {
-  implicit val swizzle = DataView[Foo, Bar](_.a -> _.d, _.b -> _.c)
+  implicit val swizzle = DataView[Foo, Bar](_ => new Bar, _.a -> _.d, _.b -> _.c)
 }
 // Current scope always wins over implicit scope
 import Swizzle._
 class FooToBarSwizzled extends Module {
   val foo = IO(Input(new Foo))
   val bar = IO(Output(new Bar))
-  bar := foo.viewAs(new Bar)
+  bar := foo.viewAs[Bar]
 }
 ```
 
@@ -462,7 +476,7 @@ implementation of `DataProduct`.
 For example, say we have some non-Bundle type:
 ```scala mdoc
 // Loosely based on chisel3.util.Counter
-class MyCounter(width: Int) {
+class MyCounter(val width: Int) {
   /** Indicates if the Counter is incrementing this cycle */
   val active = WireDefault(false.B)
   val value = RegInit(0.U(width.W))
@@ -480,7 +494,7 @@ Say we want to view `MyCounter` as a `Valid[UInt]`:
 
 ```scala mdoc:fail
 import chisel3.util.Valid
-implicit val counterView = DataView[MyCounter, Valid[UInt]](_.value -> _.bits, _.active -> _.valid)
+implicit val counterView = DataView[MyCounter, Valid[UInt]](c => Valid(UInt(c.width.W)), _.value -> _.bits, _.active -> _.valid)
 ```
 
 As you can see, this fails Scala compliation.
@@ -495,7 +509,7 @@ implicit val counterProduct = new DataProduct[MyCounter] {
     List(a.value -> s"$path.value", a.active -> s"$path.active").iterator
 }
 // Now this works
-implicit val counterView = DataView[MyCounter, Valid[UInt]](_.value -> _.bits, _.active -> _.valid)
+implicit val counterView = DataView[MyCounter, Valid[UInt]](c => Valid(UInt(c.width.W)), _.value -> _.bits, _.active -> _.valid)
 ```
 
 Why is this useful?

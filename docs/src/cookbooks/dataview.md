@@ -31,8 +31,10 @@ class Foo[T <: Data](val foo: T) extends Bundle
 class Bar[T <: Data](val bar: T) extends Bundle
 
 object Foo {
-  implicit def view[T <: Data]: DataView[Foo[T], Bar[T]] =
-    DataView(_.foo -> _.bar)
+  implicit def view[T <: Data]: DataView[Foo[T], Bar[T]] = {
+    DataView(f => new Bar(f.foo.cloneType), _.foo -> _.bar)
+    // .cloneType is necessary because the f passed to this function will be bound hardware
+  }
 }
 ```
 
@@ -41,10 +43,13 @@ object Foo {
 class MyModule extends RawModule {
   val in = IO(Input(new Foo(UInt(8.W))))
   val out = IO(Output(new Bar(UInt(8.W))))
-  out := in.viewAs(new Bar(UInt(8.W)))
+  out := in.viewAs[Bar[UInt]]
 }
 chisel3.stage.ChiselStage.emitVerilog(new MyModule)
 ```
+If you think about type parameterized classes as really being a family of different classes
+(one for each type parameter), you can think about the `implicit def` as a generator of `DataViews`
+for each type parameter.
 
 ## How do I create a DataView for a Bundle with optional fields?
 
@@ -54,21 +59,26 @@ Instead of using the default `DataView` apply method, use `DataView.mapping`:
 import chisel3._
 import chisel3.experimental.dataview._
 
-class Foo(w: Option[Int]) extends Bundle {
+class Foo(val w: Option[Int]) extends Bundle {
   val foo = UInt(8.W)
   val opt = w.map(x => UInt(x.W))
 }
-class Bar(w: Option[Int]) extends Bundle {
+class Bar(val w: Option[Int]) extends Bundle {
   val bar = UInt(8.W)
   val opt = w.map(x => UInt(x.W))
 }
 
 object Foo {
   implicit val view: DataView[Foo, Bar] =
-    DataView.mapping { case (f, b) =>
-      // Note that we can append options since they are iterable just like Lists!
-      List(f.foo -> b.bar) ++ f.opt.map(_ -> b.opt.get)
-    }
+    DataView.mapping(
+      // First argument is always the function to make the view from the target
+      f => new Bar(f.w),
+      // Now instead of a varargs of tuples of individual mappings, we have a single function that
+      // takes a target and a view and returns an Iterable of tuple
+      (f, b) =>  List(f.foo -> b.bar) ++ f.opt.map(_ -> b.opt.get)
+                                   // ^ Note that we can append options since they are Iterable!
+
+    )
 }
 ```
 
@@ -77,7 +87,7 @@ object Foo {
 class MyModule extends RawModule {
   val in = IO(Input(new Foo(Some(8))))
   val out = IO(Output(new Bar(Some(8))))
-  out := in.viewAs(new Bar(Some(8)))
+  out := in.viewAs[Bar]
 }
 chisel3.stage.ChiselStage.emitVerilog(new MyModule)
 ```
