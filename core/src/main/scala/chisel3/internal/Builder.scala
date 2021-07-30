@@ -323,6 +323,11 @@ private[chisel3] class ChiselContext() {
 
   // Records the different prefixes which have been scoped at this point in time
   var prefixStack: Prefix = Nil
+
+  // Views belong to a separate namespace (for renaming)
+  // The namespace outside of Builder context is useless, but it ensures that views can still be created
+  // and the resulting .toTarget is very clearly useless (_$$View$$_...)
+  val viewNamespace = Namespace.empty
 }
 
 private[chisel3] class DynamicContext(val annotationSeq: AnnotationSeq) {
@@ -340,8 +345,6 @@ private[chisel3] class DynamicContext(val annotationSeq: AnnotationSeq) {
 
   // Views that do not correspond to a single ReferenceTarget and thus require renaming
   val unnamedViews: ArrayBuffer[Data] = ArrayBuffer.empty
-  // Views belong to a separate namespace (for renaming)
-  val viewNamespace = Namespace.empty
 
   // Set by object Module.apply before calling class Module constructor
   // Used to distinguish between no Module() wrapping, multiple wrappings, and rewrapping
@@ -395,7 +398,7 @@ private[chisel3] object Builder extends LazyLogging {
   def namingStack: NamingStack = dynamicContext.namingStack
 
   def unnamedViews: ArrayBuffer[Data] = dynamicContext.unnamedViews
-  def viewNamespace: Namespace = dynamicContext.viewNamespace
+  def viewNamespace: Namespace = chiselContext.get.viewNamespace
 
   // Puts a prefix string onto the prefix stack
   def pushPrefix(d: String): Unit = {

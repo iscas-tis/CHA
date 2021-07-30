@@ -14,6 +14,7 @@ import annotation.implicitNotFound
 @implicitNotFound("Could not find implicit value for DataView[${T}, ${V}].\n" +
   "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview")
 sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
+  private[chisel3] val mkView: T => V,
   private[chisel3] val mapping: (T, V) => Iterable[(Data, Data)],
   val total: Boolean
 )(
@@ -36,47 +37,28 @@ sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
     * @tparam V2 View type of `DataView` `g`
     * @return a new `DataView` from the original `T` to new view-type `V2`
     */
-  def andThen[V2 <: Data](g: DataView[V, V2])(gen: (T, V2) => V)(implicit sourceInfo: SourceInfo): DataView[T, V2] = {
-    val view2 = g.invert
+  def andThen[V2 <: Data](g: DataView[V, V2])(implicit sourceInfo: SourceInfo): DataView[T, V2] = {
     new DataView[T, V2](
-      { case (a, c) =>
-          val b = gen(a, c)
-          List(a.viewAs(b)(this) -> c.viewAs(b)(view2))
-      },
-      this.total && view2.total
+      t => g.mkView(mkView(t)),
+      { case (t, v2) => List(t.viewAs[V](this).viewAs[V2](g) -> v2) },
+      this.total && g.total
     )
   }
 }
-/** Implementation of viewing a Record as its parent type
-  *
-  * This does a Stringly-typed mapping which is safe because we have a direct inheritance relationship
-  */
-private[dataview] class RecordAsParentView[T <: Record, V <: Record](implicit ev: T <:< V, sourceInfo: SourceInfo) extends DataView[T, V](
-  { case (a, b) =>
-    val aElts = a.elements
-    val bElts = b.elements
-    val bKeys = bElts.keySet
-    val keys = aElts.keysIterator.filter(bKeys.contains)
-    keys.map(k => aElts(k) -> bElts(k)).toSeq
-  },
-  // TODO can we make this total when T =:= V?
-  // Currently we check dynamically during the viewAs binding operation
-  total = false
-)
 
 /** Factory methods for constructing [[DataView]]s
   *
   */
 object DataView {
 
-  def apply[T : DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    DataView.pairs(pairs: _*)
+  def apply[T : DataProduct, V <: Data](mkView: T => V)(pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    DataView.pairs(mkView)(pairs: _*)
 
-  def pairs[T : DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    mapping(swizzle(pairs))
+  def pairs[T : DataProduct, V <: Data](mkView: T => V)(pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    mapping(mkView: T => V)(swizzle(pairs))
 
-  def mapping[T : DataProduct, V <: Data](mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    new DataView[T, V](mapping, total = true)
+  def mapping[T : DataProduct, V <: Data](mkView: T => V)(mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    new DataView[T, V](mkView, mapping, total = true)
 
   /** Provides `invert` for invertible [[DataView]]s
     *
@@ -84,7 +66,7 @@ object DataView {
     * type parameter, namely that it must be a subtype of [[Data]]
     */
   implicit class InvertibleDataView[T <: Data : WeakTypeTag, V <: Data : WeakTypeTag](view: DataView[T, V]) {
-    def invert: DataView[V, T] = {
+    def invert(mkView: V => T): DataView[V, T] = {
       // It would've been nice to make this a compiler error, but it's unclear how to make that work.
       // We tried having separate TotalDataView and PartialDataView and only defining inversion for
       // TotalDataView. For some reason, implicit resolution wouldn't invert TotalDataViews. This is
@@ -99,7 +81,7 @@ object DataView {
         throw InvalidViewException(msg)
       }
       implicit val sourceInfo = view.sourceInfo
-      new DataView[V, T](swapArgs(view.mapping), view.total)
+      new DataView[V, T](mkView, swapArgs(view.mapping), view.total)
     }
   }
 
@@ -111,48 +93,9 @@ object DataView {
     case (b, a) => f(a, b).map(_.swap)
   }
 
-  // Rob Norris (tpolecat) advises against this: https://gitter.im/scala/scala?at=6080bd5881866c680c3ac477
-  //   It leads to "diverging implicit expansion" errors if an implicit isn't found (which is a terrible error message)
-  // We tried having the DataView factory methods return tuples, but this lead to terrible error messages:
-  //   https://gitter.im/scala/scala?at=60ad912f9d18fe1998270cd8
-  //   (eg. "recursive value x$1 needs type" when no value named "x" even exists in the code)
-  // Instead, we keep implicit swapping but provide a low-priority default DataView that is just a macro
-  //   expanding into a custom error message, see: dataViewNotFound
-  /** Total [[DataView]]s are bidirectional mappings so need only be implemented in one direction */
-  implicit def swapDataView[A <: Data : WeakTypeTag, B <: Data : WeakTypeTag](implicit d: DataView[B, A]): DataView[A, B] =
-    d.invert
-
-
   /** All Chisel Data are viewable as their own type */
-  def identityView[A <: Data](implicit sourceInfo: SourceInfo): DataView[A, A] = DataView[A, A]({ case (x, y) => (x, y) })
-
-  // Due to ambiguity with asParentRecord for Records, we provide specific identities for other types
-  // and use asParentRecord as the identity for Records
-
-  implicit def elementIdentityView[A <: Element](implicit sourceInfo: SourceInfo): DataView[A, A] = identityView[A]
-  implicit def vecIdentityView[A <: Vec[_]](implicit sourceInfo: SourceInfo): DataView[A, A] = identityView[A]
-
-  // Should this be part of default import or not, would simplify the identity stuff above,
-  // Another option is to use low-priority implicits (aka macros) for identityView
-  implicit def asParentRecord[T <: Record, V <: Record](implicit ev: T <:< V, sourceInfo: SourceInfo): DataView[T, V] =
-    new RecordAsParentView[T, V]
-
-
-  import scala.language.experimental.macros
-  import scala.reflect.macros.blackbox.Context
-
-  /** Default implementation of [[DataView]] that causes a compiler error
-    *
-    * This is sort of a DIY @implicitNotFound except it also prevents "diverging implicit expansion"
-    * errors that would occur due to [[swapDataView]] causing infinite recursion in implicit resolution.
-    */
-  implicit def dataViewNotFound[T, V <: Data]: DataView[T, V] = macro dataViewNotFound_impl[T, V]
-
-  def dataViewNotFound_impl[T, V](c: Context)(implicit t: c.WeakTypeTag[T], v: c.WeakTypeTag[V]): c.Tree = {
-    val msg = s"Could not find implicit value for DataView[${t.tpe}, ${v.tpe}].\n" +
-      "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview#dataproduct."
-    c.abort(c.enclosingPosition, msg)
-  }
+  implicit def identityView[A <: Data](implicit sourceInfo: SourceInfo): DataView[A, A] =
+    DataView[A, A](chiselTypeOf.apply)({ case (x, y) => (x, y) })
 }
 
 /** Factory methods for constructing non-total [[DataView]]s
@@ -160,12 +103,12 @@ object DataView {
   */
 object PartialDataView {
 
-  def apply[T: DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    PartialDataView.pairs(pairs: _*)
+  def apply[T: DataProduct, V <: Data](mkView: T => V)(pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    PartialDataView.pairs(mkView)(pairs: _*)
 
-  def pairs[T: DataProduct, V <: Data](pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    mapping(DataView.swizzle(pairs))
+  def pairs[T: DataProduct, V <: Data](mkView: T => V)(pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    mapping(mkView)(DataView.swizzle(pairs))
 
-  def mapping[T: DataProduct, V <: Data](mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    new DataView[T, V](mapping, total = false)
+  def mapping[T: DataProduct, V <: Data](mkView: T => V)(mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
+    new DataView[T, V](mkView, mapping, total = false)
 }

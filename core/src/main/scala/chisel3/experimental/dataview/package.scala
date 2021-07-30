@@ -3,7 +3,8 @@
 package chisel3.experimental
 
 import chisel3._
-import chisel3.internal.{AggregateViewBinding, Builder, TopBinding, ViewBinding, ViewParent, requireIsChiselType}
+import chisel3.internal._
+import chisel3.internal.sourceinfo.SourceInfo
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -11,6 +12,49 @@ import scala.collection.immutable.LazyList // Needed for 2.12 alias
 
 package object dataview {
   case class InvalidViewException(message: String) extends ChiselException(message)
+
+  // TODO is this right place to put this?
+  /** Provides `viewAs` for types that are supported as [[DataView]] targets */
+  implicit class DataViewable[T : DataProduct](target: T) {
+    //def viewAs[V <: Data](view: V)(implicit dataView: DataView[T, V]): V = {
+    def viewAs[V <: Data](implicit dataView: DataView[T, V]): V = {
+      // TODO put a try catch here for ExpectedHardwareException and perhaps others
+      // It's likely users will accidentally use chiselTypeOf or something that may error,
+      // The right thing to use is DataMirror...chiselTypeClone because of composition with DataView.andThen
+      // Another option is that .andThen could give a fake binding making chiselTypeOfs in the user code safe
+      val result: V = dataView.mkView(target)
+      requireIsChiselType(result, "viewAs")
+
+      doBind(target, result, dataView)
+
+      // Setting the parent marks these Data as Views
+      result.setAllParents(Some(ViewParent))
+      // The names of views do not matter except for when a view is annotated. For Views that correspond
+      // To a single Data, we just forward the name of the Target. For Views that correspond to more
+      // than one Data, we return this assigned name but rename it in the Convert stage
+      result.forceName(None, "view", Builder.viewNamespace)
+      result
+    }
+  }
+
+  /** Provides `viewAs` viewing [[Record]]s as a parent Type
+    *
+    * This does a Stringly-typed mapping which is safe because we have a direct inheritance relationship
+    */
+  implicit class ViewableAsParentType[T <: Record](target: T) {
+    // TODO Is this the best name? Cannot overload viewAs unfortunately
+    def viewAsParent[V <: Record](proto: V)(implicit ev: T <:< V, sourceInfo: SourceInfo): V = {
+      implicit val dataView = PartialDataView.mapping[T, V](_ => proto) {
+        case (a, b) =>
+          val aElts = a.elements
+          val bElts = b.elements
+          val bKeys = bElts.keySet
+          val keys = aElts.keysIterator.filter(bKeys.contains)
+          keys.map(k => aElts(k) -> bElts(k)).toSeq
+      }
+      target.viewAs[V]
+    }
+  }
 
   private def nonTotalViewException(dataView: DataView[_, _], target: Any, view: Data, targetFields: Seq[String], viewFields: Seq[String]) = {
     def missingMsg(name: String, fields: Seq[String]): Option[String] = {
@@ -36,8 +80,8 @@ package object dataview {
   private def doBind[T : DataProduct, V <: Data](target: T, view: V, dataView: DataView[T, V]): Unit = {
     val mapping = dataView.mapping(target, view)
     // We don't have a static way to determine if a Record viewed as it's own type is total (see RecordAsParentView)
-    def isRecordIdentityView = dataView.isInstanceOf[RecordAsParentView[_, _]] && target.asInstanceOf[Record].typeEquivalent(view)
-    val total = dataView.total || isRecordIdentityView
+    //def isRecordIdentityView = dataView.isInstanceOf[RecordAsParentView[_, _]] && target.asInstanceOf[Record].typeEquivalent(view)
+    val total = dataView.total // || isRecordIdentityView
     // Lookups to check the mapping results
     val viewFieldLookup: Map[Data, String] = getRecursiveFields(view, "_").toMap
     val targetContains: Data => Boolean = implicitly[DataProduct[T]].dataSet(target)
@@ -137,24 +181,6 @@ package object dataview {
           case _ => // Do nothing
         }
         agg.bind(AggregateViewBinding(resultBindings, topt))
-    }
-  }
-
-  // TODO is this right place to put this?
-  /** Provides `viewAs` for types that are supported as [[DataView]] targets */
-  implicit class DataViewable[T : DataProduct](target: T) {
-    def viewAs[V <: Data](view: V)(implicit dataView: DataView[T, V]): V = {
-      requireIsChiselType(view, "viewAs")
-      val result: V = view.cloneTypeFull
-
-      doBind(target, result, dataView)
-      // Setting the parent marks these Data as Views
-      result.setAllParents(Some(ViewParent))
-      // The names of views do not matter except for when a view is annotated. For Views that correspond
-      // To a single Data, we just forward the name of the Target. For Views that correspond to more
-      // than one Data, we return this assigned name but rename it in the Convert stage
-      result.forceName(None, "view", Builder.viewNamespace)
-      result
     }
   }
 

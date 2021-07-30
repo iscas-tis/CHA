@@ -49,7 +49,7 @@ class DataViewTargetSpec extends ChiselFlatSpec {
   it should "support views of Elements" in {
     class MyChild extends Module {
       val out = IO(Output(UInt(8.W)))
-      val insideView = out.viewAs(UInt())
+      val insideView = out.viewAs[UInt]
       out := 0.U
     }
     class MyParent extends Module {
@@ -58,7 +58,7 @@ class DataViewTargetSpec extends ChiselFlatSpec {
       out := inst.out
     }
     val m = elaborateAndGetModule(new MyParent)
-    val outsideView = m.inst.out.viewAs(UInt())
+    val outsideView = m.inst.out.viewAs[UInt]
     checkSameAs(m.inst.out, m.inst.insideView, outsideView)
   }
 
@@ -67,13 +67,13 @@ class DataViewTargetSpec extends ChiselFlatSpec {
       val foo = UInt(8.W)
       val bars = Vec(2, UInt(8.W))
     }
-    implicit val dv = DataView[MyBundle, Vec[UInt]](_.foo -> _(0), _.bars(0) -> _(1), _.bars(1) -> _(2))
+    implicit val dv = DataView[MyBundle, Vec[UInt]](_ => Vec(3, UInt(8.W)))(_.foo -> _(0), _.bars(0) -> _(1), _.bars(1) -> _(2))
     class MyChild extends Module {
       val out = IO(Output(new MyBundle))
-      val outView = out.viewAs(Vec(3, UInt())) // Note different type
-      val outFooView = out.foo.viewAs(UInt())
-      val outBarsView = out.bars.viewAs(Vec(2, UInt(8.W)))
-      val outBars0View = out.bars(0).viewAs(UInt())
+      val outView = out.viewAs[Vec[UInt]] // Note different type
+      val outFooView = out.foo.viewAs[UInt]
+      val outBarsView = out.bars.viewAs[Vec[UInt]]
+      val outBars0View = out.bars(0).viewAs[UInt]
       out := 0.U.asTypeOf(new MyBundle)
     }
     class MyParent extends Module {
@@ -82,10 +82,10 @@ class DataViewTargetSpec extends ChiselFlatSpec {
       out := inst.out
     }
     val m = elaborateAndGetModule(new MyParent)
-    val outView = m.inst.out.viewAs(Vec(3, UInt())) // Note different type
-    val outFooView = m.inst.out.foo.viewAs(UInt())
-    val outBarsView = m.inst.out.bars.viewAs(Vec(2, UInt(8.W)))
-    val outBars0View = m.inst.out.bars(0).viewAs(UInt())
+    val outView = m.inst.out.viewAs[Vec[UInt]]// Note different type
+    val outFooView = m.inst.out.foo.viewAs[UInt]
+    val outBarsView = m.inst.out.bars.viewAs[Vec[UInt]]
+    val outBars0View = m.inst.out.bars(0).viewAs[UInt]
 
     checkSameAs(m.inst.out, m.inst.outView, outView)
     checkSameAs(m.inst.out.foo, m.inst.outFooView, m.inst.outView(0), outFooView, outView(0))
@@ -101,7 +101,7 @@ class DataViewTargetSpec extends ChiselFlatSpec {
     }
     class MyChild extends Module {
       val out = IO(Output(new MyBundle))
-      val outView = out.viewAs(new MyBundle)
+      val outView = out.viewAs[MyBundle]
       mark(out.foo, 0)
       mark(outView.foo, 1)
       markAbs(out.foo, 2)
