@@ -16,7 +16,7 @@ object SimpleBundleDataView {
   class BundleB(val w: Int) extends Bundle {
     val bar = UInt(w.W)
   }
-  implicit val v1 = DataView[BundleA, BundleB](a => new BundleB(a.w))(_.foo -> _.bar)
+  implicit val v1 = DataView[BundleA, BundleB](a => new BundleB(a.w), _.foo -> _.bar)
   implicit val v2 = v1.invert(b => new BundleA(b.w))
 }
 
@@ -25,7 +25,7 @@ object VecBundleDataView {
     val foo = UInt(8.W)
     val bar = UInt(8.W)
   }
-  implicit val v1 = DataView[MyBundle, Vec[UInt]](_ => Vec(2, UInt(8.W)))(_.foo -> _(1), _.bar -> _(0))
+  implicit val v1: DataView[MyBundle, Vec[UInt]] = DataView(_ => Vec(2, UInt(8.W)), _.foo -> _(1), _.bar -> _(0))
   implicit val v2 = v1.invert(_ => new MyBundle)
 }
 
@@ -52,12 +52,12 @@ object HWTuple {
   implicit def view[T1 : DataProduct, T2 : DataProduct, V1 <: Data, V2 <: Data](
     implicit v1: DataView[T1, V1], v2: DataView[T2, V2]
   ): DataView[(T1, T2), HWTuple2[V1, V2]] =
-    DataView.mapping[(T1, T2), HWTuple2[V1, V2]] {
+    DataView.mapping({
       case (a, b) => new HWTuple2(a.viewAs[V1].cloneType, b.viewAs[V2].cloneType)
-    } { case ((a, b), hwt) =>
+    }, { case ((a, b), hwt) =>
       Seq(a.viewAs[V1] -> hwt._1,
           b.viewAs[V2] -> hwt._2)
-   }
+   })
 
   implicit def tuple2hwtuple[T1 : DataProduct, T2 : DataProduct, V1 <: Data, V2 <: Data](
     tup: (T1, T2))(implicit v1: DataView[T1, V1], v2: DataView[T2, V2]
@@ -175,8 +175,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val buzz = Output(UInt(8.W))
     }
     implicit val view = DataView[FlatDecoupled, DecoupledIO[FizzBuzz]](
-      _ => Decoupled(new FizzBuzz)
-    )(
+      _ => Decoupled(new FizzBuzz),
       _.valid -> _.valid,
       _.ready -> _.ready,
       _.fizz -> _.bits.fizz,
@@ -294,8 +293,8 @@ class DataViewSpec extends ChiselFlatSpec {
     class Bar(val bar: UInt) extends Bundle
     class Fizz(val fizz: UInt) extends Bundle
 
-    implicit val foo2bar = DataView[Foo, Bar](f => new Bar(chiselTypeClone(f.foo)))(_.foo -> _.bar)
-    implicit val bar2fizz = DataView[Bar, Fizz](b => new Fizz(chiselTypeClone(b.bar)))(_.bar -> _.fizz)
+    implicit val foo2bar = DataView[Foo, Bar](f => new Bar(chiselTypeClone(f.foo)), _.foo -> _.bar)
+    implicit val bar2fizz = DataView[Bar, Fizz](b => new Fizz(chiselTypeClone(b.bar)), _.bar -> _.fizz)
 
     implicit val foo2fizz: DataView[Foo, Fizz] = foo2bar.andThen(bar2fizz)
 
@@ -349,10 +348,9 @@ class DataViewSpec extends ChiselFlatSpec {
     // TODO this would need a better way to determine the prototype for the Vec
     implicit def view[A <: Data]: DataView[Seq[A], Vec[A]] =
       DataView.mapping[Seq[A], Vec[A]](
-        xs => Vec(xs.size, chiselTypeClone(xs.head)) // xs.head is not correct in general
-      ) {
-        case (s: Seq[A], v: Vec[A]) => s.zip(v)
-      }
+        xs => Vec(xs.size, chiselTypeClone(xs.head)), // xs.head is not correct in general
+        { case (s: Seq[A], v: Vec[A]) => s.zip(v) }
+      )
 
     class MyModule extends Module {
       val a, b, c = IO(Input(UInt(8.W)))
@@ -376,10 +374,9 @@ class DataViewSpec extends ChiselFlatSpec {
     // TODO hoist this above into an object to share between tests
     implicit def view[A : DataProduct, B <: Data](implicit dv: DataView[A, B]): DataView[Seq[A], Vec[B]] =
       DataView.mapping[Seq[A], Vec[B]](
-        xs => Vec(xs.size, chiselTypeClone(xs.head.viewAs[B])) // xs.head is not correct in general
-      ) { case (s, v) =>
-        s.zip(v).map { case (a, b) => a.viewAs[B] -> b }
-      }
+        xs => Vec(xs.size, chiselTypeClone(xs.head.viewAs[B])), // xs.head is not correct in general
+        { case (s, v) => s.zip(v).map { case (a, b) => a.viewAs[B] -> b } }
+      )
 
     class MyModule extends Module {
       val a, b, c, d = IO(Input(UInt(8.W)))
@@ -398,7 +395,7 @@ class DataViewSpec extends ChiselFlatSpec {
 
   it should "error if the mapping is non-total in the view" in {
     class MyBundle(val foo: UInt, val bar: UInt) extends Bundle
-    implicit val dv = DataView[UInt, MyBundle](_ => new MyBundle(UInt(), UInt()))(_ -> _.bar)
+    implicit val dv = DataView[UInt, MyBundle](_ => new MyBundle(UInt(), UInt()), _ -> _.bar)
     class MyModule extends Module {
       val tpe = new MyBundle(UInt(8.W), UInt(8.W))
       val in = IO(Input(UInt(8.W)))
@@ -411,7 +408,7 @@ class DataViewSpec extends ChiselFlatSpec {
 
   it should "error if the mapping is non-total in the target" in {
     import Tuple2DataProduct._
-    implicit val dv = DataView[(UInt, UInt), UInt](_ => UInt())(_._1 -> _)
+    implicit val dv = DataView[(UInt, UInt), UInt](_ => UInt(), _._1 -> _)
     class MyModule extends Module {
       val a, b = IO(Input(UInt(8.W)))
       val out = IO(Output(UInt(8.W)))
@@ -429,7 +426,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val fizz = UInt(8.W)
       val buzz = UInt(8.W)
     }
-    implicit val dv = DataView[BundleA, BundleB](_ => new BundleB)(_.foo -> _.fizz, (_, b) => (3.U, b.buzz))
+    implicit val dv = DataView[BundleA, BundleB](_ => new BundleB, _.foo -> _.fizz, (_, b) => (3.U, b.buzz))
     class MyModule extends Module {
       val in = IO(Input(new BundleA))
       val out = IO(Output(new BundleB))
@@ -448,7 +445,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val fizz = UInt(8.W)
       val buzz = UInt(8.W)
     }
-    implicit val dv = DataView[BundleA, BundleB](_ => new BundleB)(_.foo -> _.fizz, (_, b) => (3.U, b.buzz))
+    implicit val dv = DataView[BundleA, BundleB](_ => new BundleB, _.foo -> _.fizz, (_, b) => (3.U, b.buzz))
     implicit val dv2 = dv.invert(_ => new BundleA)
     class MyModule extends Module {
       val in = IO(Input(new BundleA))
@@ -464,7 +461,7 @@ class DataViewSpec extends ChiselFlatSpec {
 
   it should "still error if the mapping is non-total in the view" in {
     class MyBundle(val foo: UInt, val bar: UInt) extends Bundle
-    implicit val dv = PartialDataView[UInt, MyBundle](_ => new MyBundle(UInt(), UInt()))(_ -> _.bar)
+    implicit val dv = PartialDataView[UInt, MyBundle](_ => new MyBundle(UInt(), UInt()), _ -> _.bar)
     class MyModule extends Module {
       val in = IO(Input(UInt(8.W)))
       val out = IO(Output(new MyBundle(UInt(8.W), UInt(8.W))))
@@ -476,7 +473,7 @@ class DataViewSpec extends ChiselFlatSpec {
 
   it should "NOT error if the mapping is non-total in the target" in {
     import Tuple2DataProduct._
-    implicit val dv = PartialDataView[(UInt, UInt), UInt](_ => UInt())(_._2 -> _)
+    implicit val dv = PartialDataView[(UInt, UInt), UInt](_ => UInt(), _._2 -> _)
     class MyModule extends Module {
       val a, b = IO(Input(UInt(8.W)))
       val out = IO(Output(UInt(8.W)))

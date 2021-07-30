@@ -67,7 +67,7 @@ class DataViewTargetSpec extends ChiselFlatSpec {
       val foo = UInt(8.W)
       val bars = Vec(2, UInt(8.W))
     }
-    implicit val dv = DataView[MyBundle, Vec[UInt]](_ => Vec(3, UInt(8.W)))(_.foo -> _(0), _.bars(0) -> _(1), _.bars(1) -> _(2))
+    implicit val dv = DataView[MyBundle, Vec[UInt]](_ => Vec(3, UInt(8.W)), _.foo -> _(0), _.bars(0) -> _(1), _.bars(1) -> _(2))
     class MyChild extends Module {
       val out = IO(Output(new MyBundle))
       val outView = out.viewAs[Vec[UInt]] // Note different type

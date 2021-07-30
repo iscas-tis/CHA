@@ -45,14 +45,14 @@ package object dataview {
     /** View a [[Bundle]] or [[Record]] as a parent type (upcast)
       */
     def viewAs[V <: Record](proto: V)(implicit ev: SubTypeOf[T, V], sourceInfo: SourceInfo): V = {
-      implicit val dataView = PartialDataView.mapping[T, V](_ => proto) {
+      implicit val dataView = PartialDataView.mapping[T, V](_ => proto, {
         case (a, b) =>
           val aElts = a.elements
           val bElts = b.elements
           val bKeys = bElts.keySet
           val keys = aElts.keysIterator.filter(bKeys.contains)
           keys.map(k => aElts(k) -> bElts(k)).toSeq
-      }
+      })
       target.viewAs[V]
     }
   }
