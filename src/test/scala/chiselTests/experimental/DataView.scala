@@ -201,44 +201,42 @@ class DataViewSpec extends ChiselFlatSpec {
     chirrtl should include("deq2.buzz <= enq.bits.buzz")
   }
 
-//  it should "support viewing a Bundle as a Parent Bundle type" in {
-//    class Foo extends Bundle {
-//      val foo = UInt(8.W)
-//    }
-//    class Bar extends Foo {
-//      val bar = UInt(8.W)
-//    }
-//    class MyModule extends Module {
-//      val fooIn = IO(Input(new Foo))
-//      val barOut = IO(Output(new Bar))
-//      barOut.viewAs(new Foo) := fooIn
-//
-//      val barIn = IO(Input(new Bar))
-//      val fooOut = IO(Output(new Foo))
-//      fooOut := barIn.viewAs(new Foo)
-//    }
-//    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
-//    chirrtl should include("barOut.foo <= fooIn.foo")
-//    chirrtl should include("fooOut.foo <= barIn.foo")
-//  }
+  it should "support viewing a Bundle as a Parent Bundle type" in {
+    class Foo extends Bundle {
+      val foo = UInt(8.W)
+    }
+    class Bar extends Foo {
+      val bar = UInt(8.W)
+    }
+    class MyModule extends Module {
+      val fooIn = IO(Input(new Foo))
+      val barOut = IO(Output(new Bar))
+      barOut.viewAs(new Foo) := fooIn
 
-//  it should "error if viewing a parent Bundle as a child Bundle type" in {
-//    class Foo extends Bundle {
-//      val foo = UInt(8.W)
-//    }
-//    class Bar extends Foo {
-//      val bar = UInt(8.W)
-//    }
-//    class MyModule extends Module {
-//      val barIn = IO(Input(new Bar))
-//      val fooOut = IO(Output(new Foo))
-//      fooOut.viewAs(new Bar) := barIn
-//    }
-//    an [InvalidViewException] shouldBe thrownBy {
-//      ChiselStage.emitChirrtl(new MyModule)
-//    }
-//
-//  }
+      val barIn = IO(Input(new Bar))
+      val fooOut = IO(Output(new Foo))
+      fooOut := barIn.viewAs(new Foo)
+    }
+    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    chirrtl should include("barOut.foo <= fooIn.foo")
+    chirrtl should include("fooOut.foo <= barIn.foo")
+  }
+
+  it should "error if viewing a parent Bundle as a child Bundle type" in {
+    assertTypeError("""
+      class Foo extends Bundle {
+        val foo = UInt(8.W)
+      }
+      class Bar extends Foo {
+        val bar = UInt(8.W)
+      }
+      class MyModule extends Module {
+        val barIn = IO(Input(new Bar))
+        val fooOut = IO(Output(new Foo))
+        fooOut.viewAs(new Bar) := barIn
+      }
+    """)
+  }
 
   it should "work in UInt operations" in {
     class MyModule extends Module {
