@@ -114,6 +114,14 @@ package object dataview {
         val fieldName = viewFieldName(vex)
         throw new Exception(s"Field $fieldName specified as view of non-type-equivalent value $tex")
       }
+      // View width must be unknown or match target width
+      if (vex.widthKnown && vex.width != tex.width) {
+        def widthAsString(x: Element) = x.widthOption.map("<" + _ + ">").getOrElse("<unknown>")
+        val fieldName = viewFieldName(vex)
+        val vwidth = widthAsString(vex)
+        val twidth = widthAsString(tex)
+        throw new Exception(s"View field $fieldName has width ${vwidth} that is incompatible with target value $tex's width ${twidth}")
+      }
       childBindings(vex) += tex
     }
 

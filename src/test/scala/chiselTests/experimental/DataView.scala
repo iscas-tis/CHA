@@ -459,6 +459,44 @@ class DataViewSpec extends ChiselFlatSpec {
     err.toString should include ("View mapping must only contain Elements within the View")
   }
 
+  it should "error if a view has a width that does not match the target" in {
+    class BundleA extends Bundle {
+      val foo = UInt(8.W)
+    }
+    class BundleB extends Bundle {
+      val bar = UInt(4.W)
+    }
+    implicit val dv = DataView[BundleA, BundleB](_ => new BundleB, _.foo -> _.bar)
+    class MyModule extends Module {
+      val in = IO(Input(new BundleA))
+      val out = IO(Output(new BundleB))
+      out := in.viewAs[BundleB]
+    }
+    // TODO more precise Exception type
+    val err = the [Exception] thrownBy ChiselStage.emitChirrtl(new MyModule)
+    val expected = """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <8>""".r
+    err.getMessage should fullyMatch regex expected
+  }
+
+  it should "error if a view has a known width when the target width is unknown" in {
+    class BundleA extends Bundle {
+      val foo = UInt()
+    }
+    class BundleB extends Bundle {
+      val bar = UInt(4.W)
+    }
+    implicit val dv = DataView[BundleA, BundleB](_ => new BundleB, _.foo -> _.bar)
+    class MyModule extends Module {
+      val in = IO(Input(new BundleA))
+      val out = IO(Output(new BundleB))
+      out := in.viewAs[BundleB]
+    }
+    // TODO more precise Exception type
+    val err = the [Exception] thrownBy ChiselStage.emitChirrtl(new MyModule)
+    val expected = """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <unknown>""".r
+    err.getMessage should fullyMatch regex expected
+  }
+
   behavior of "PartialDataView"
 
   it should "still error if the mapping is non-total in the view" in {
