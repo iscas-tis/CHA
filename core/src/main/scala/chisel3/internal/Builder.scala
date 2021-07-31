@@ -698,6 +698,8 @@ private[chisel3] object Builder extends LazyLogging {
 
   private [chisel3] def build[T <: RawModule](f: => T, dynamicContext: DynamicContext): (Circuit, T) = {
     dynamicContextVar.withValue(Some(dynamicContext)) {
+      ViewParent // Must initialize the singleton in a Builder context or weird things can happen
+                 // in tiny designs/testcases that never access anything in chisel3.internal
       checkScalaVersion()
       logger.warn("Elaborating design...")
       val mod = f
