@@ -374,19 +374,23 @@ class DataViewSpec extends ChiselFlatSpec {
 
     // TODO this would need a better way to determine the prototype for the Vec
     // TODO hoist this above into an object to share between tests
-    implicit def view[A : DataProduct, B <: Data](implicit dv: DataView[A, B]): DataView[Seq[A], Vec[B]] =
+    implicit def seqVec[A : DataProduct, B <: Data](implicit dv: DataView[A, B]): DataView[Seq[A], Vec[B]] =
       DataView.mapping[Seq[A], Vec[B]](
         xs => Vec(xs.size, chiselTypeClone(xs.head.viewAs[B])), // xs.head is not correct in general
         { case (s, v) => s.zip(v).map { case (a, b) => a.viewAs[B] -> b } }
       )
 
+    implicit def seq2Vec[A : DataProduct, B <: Data](xs: Seq[A])(implicit dv: DataView[A, B]): Vec[B] =
+      xs.viewAs[Vec[B]]
+
     class MyModule extends Module {
       val a, b, c, d = IO(Input(UInt(8.W)))
       val w, x, y, z = IO(Output(UInt(8.W)))
 
-      val v = Seq((w, x), (y, z)).viewAs[Vec[HWTuple2[UInt, UInt]]]
-      // A little annoying that we need the type annotation to get the implicit conversion to work
-      v := VecInit[HWTuple2[UInt, UInt]]((a, b), (c, d))
+      // A little annoying that we need the type annotation on VecInit to get the implicit conversion to work
+      // Note that one can just use the Seq on the RHS so there is an alternative (may lack discoverability)
+      // We could also overload `VecInit` instead of relying on the implicit conversion
+      Seq((w, x), (y, z)) := VecInit[HWTuple2[UInt, UInt]]((a, b), (c, d))
     }
     val verilog = ChiselStage.emitVerilog(new MyModule)
     verilog should include ("assign w = a;")
