@@ -3,6 +3,7 @@
 package chisel3
 
 import chisel3.experimental.VecLiterals.AddVecLiteralConstructor
+import chisel3.experimental.dataview.{InvalidViewException, isView}
 
 import scala.collection.immutable.{SeqMap, VectorMap}
 import scala.collection.mutable.{HashSet, LinkedHashMap}
@@ -259,6 +260,9 @@ sealed class Vec[T <: Data] private[chisel3] (gen: => T, val length: Int)
   def do_apply(p: UInt)(implicit compileOptions: CompileOptions): T = {
     requireIsHardware(this, "vec")
     requireIsHardware(p, "vec index")
+    if (isView(this)) {
+      throw InvalidViewException("Dynamic indexing of Views is not yet supported")
+    }
     val port = gen
 
     // Reconstruct the resolvedDirection (in Aggregate.bind), since it's not stored.

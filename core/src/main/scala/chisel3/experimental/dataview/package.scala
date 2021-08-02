@@ -75,9 +75,6 @@ package object dataview {
     throw InvalidViewException(msg)
   }
 
-  // Safe for all Data
-  private def isView(d: Data): Boolean = d._parent.contains(ViewParent)
-
   // TODO should this be moved to class Aggregate / can it be unified with Aggregate.bind?
   private def doBind[T : DataProduct, V <: Data](target: T, view: V, dataView: DataView[T, V]): Unit = {
     val mapping = dataView.mapping(target, view)
@@ -206,6 +203,9 @@ package object dataview {
     }
     elt #:: rec(elt)
   }
+
+  // Safe for all Data
+  private[chisel3] def isView(d: Data): Boolean = d._parent.contains(ViewParent)
 
   /** Turn any [[Element]] that could be a View into a concrete Element
     *

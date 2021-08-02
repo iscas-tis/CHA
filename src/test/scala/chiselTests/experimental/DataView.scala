@@ -80,6 +80,21 @@ object SeqDataProduct {
   }
 }
 
+object SeqToVec {
+  import SeqDataProduct._
+
+  // TODO this would need a better way to determine the prototype for the Vec
+  // TODO hoist this above into an object to share between tests
+  implicit def seqVec[A : DataProduct, B <: Data](implicit dv: DataView[A, B]): DataView[Seq[A], Vec[B]] =
+    DataView.mapping[Seq[A], Vec[B]](
+      xs => Vec(xs.size, chiselTypeClone(xs.head.viewAs[B])), // xs.head is not correct in general
+      { case (s, v) => s.zip(v).map { case (a, b) => a.viewAs[B] -> b } }
+    )
+
+  implicit def seq2Vec[A : DataProduct, B <: Data](xs: Seq[A])(implicit dv: DataView[A, B]): Vec[B] =
+    xs.viewAs[Vec[B]]
+}
+
 class DataViewSpec extends ChiselFlatSpec {
 
   behavior of "DataView"
@@ -344,16 +359,7 @@ class DataViewSpec extends ChiselFlatSpec {
 
   // This example should be turned into a built-in feature
   it should "enable viewing Seqs as Vecs" in {
-    import SeqDataProduct._
-
-    // TODO this would need a better way to determine the prototype for the Vec
-    implicit def view[A <: Data]: DataView[Seq[A], Vec[A]] =
-      DataView.mapping[Seq[A], Vec[A]](
-        xs => Vec(xs.size, chiselTypeClone(xs.head)), // xs.head is not correct in general
-        { case (s: Seq[A], v: Vec[A]) => s.zip(v) }
-      )
-
-    implicit def seqToVec[A <: Data](xs: Seq[A]): Vec[A] = xs.viewAs[Vec[A]]
+    import SeqToVec._
 
     class MyModule extends Module {
       val a, b, c = IO(Input(UInt(8.W)))
@@ -370,18 +376,8 @@ class DataViewSpec extends ChiselFlatSpec {
   it should "support recursive composition of views" in {
     import Tuple2DataProduct._
     import SeqDataProduct._
+    import SeqToVec._
     import HWTuple._
-
-    // TODO this would need a better way to determine the prototype for the Vec
-    // TODO hoist this above into an object to share between tests
-    implicit def seqVec[A : DataProduct, B <: Data](implicit dv: DataView[A, B]): DataView[Seq[A], Vec[B]] =
-      DataView.mapping[Seq[A], Vec[B]](
-        xs => Vec(xs.size, chiselTypeClone(xs.head.viewAs[B])), // xs.head is not correct in general
-        { case (s, v) => s.zip(v).map { case (a, b) => a.viewAs[B] -> b } }
-      )
-
-    implicit def seq2Vec[A : DataProduct, B <: Data](xs: Seq[A])(implicit dv: DataView[A, B]): Vec[B] =
-      xs.viewAs[Vec[B]]
 
     class MyModule extends Module {
       val a, b, c, d = IO(Input(UInt(8.W)))
@@ -397,6 +393,30 @@ class DataViewSpec extends ChiselFlatSpec {
     verilog should include ("assign x = b;")
     verilog should include ("assign y = c;")
     verilog should include ("assign z = d;")
+  }
+
+
+  it should "error if you try to dynamically index a Vec view" in {
+    import SeqDataProduct._
+    import SeqToVec._
+    import Tuple2DataProduct._
+    import HWTuple._
+
+    class MyModule extends Module {
+      val inA, inB = IO(Input(UInt(8.W)))
+      val outA, outB = IO(Output(UInt(8.W)))
+      val idx = IO(Input(UInt(1.W)))
+
+      val a, b, c, d = RegInit(0.U)
+
+      // Dynamic indexing is more of a "generator" in Chisel3 than an individual node
+      val selected = Seq((a, b), (c, d)).apply(idx)
+      selected := (inA, inB)
+      (outA, outB) := selected
+    }
+    (the [InvalidViewException] thrownBy {
+      ChiselStage.emitChirrtl(new MyModule)
+    }).getMessage should include ("Dynamic indexing of Views is not yet supported")
   }
 
   it should "error if the mapping is non-total in the view" in {
