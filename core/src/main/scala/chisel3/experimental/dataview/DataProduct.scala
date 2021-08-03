@@ -2,6 +2,7 @@
 
 package chisel3.experimental.dataview
 
+import chisel3.experimental.BaseModule
 import chisel3.{Data, RawModule, getRecursiveFields}
 
 import scala.annotation.implicitNotFound
@@ -41,11 +42,19 @@ object DataProduct {
       getRecursiveFields(a, path).iterator
   }
 
-  implicit val userModuleDataProduct: DataProduct[RawModule] = new DataProduct[RawModule] {
-    def dataIterator(a: RawModule, path: String): Iterator[(Data, String)] = ???
+  implicit val userModuleDataProduct: DataProduct[BaseModule] = new DataProduct[BaseModule] {
+    def dataIterator(a: BaseModule, path: String): Iterator[(Data, String)] = {
+      a.getIds.iterator.flatMap {
+        case d: Data if d.getOptionRef.isDefined => // Using ref to decide if it's truly hardware in the module
+          Seq(d -> s"${path}.${d.instanceName}")
+        case b: BaseModule => dataIterator(b, s"$path.${b.instanceName}")
+        case _ => Seq.empty
+      }
+    }
     // Overridden for performance
-    override def dataSet(a: RawModule): Data => Boolean = { e =>
-      e._id > a._id && e._id <= a._lastId
+    override def dataSet(a: BaseModule): Data => Boolean = {
+      val lastId = a._lastId // Not cheap to compute
+      e => e._id > a._id && e._id <= lastId
     }
   }
 }

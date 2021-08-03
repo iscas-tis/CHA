@@ -395,7 +395,6 @@ class DataViewSpec extends ChiselFlatSpec {
     verilog should include ("assign z = d;")
   }
 
-
   it should "error if you try to dynamically index a Vec view" in {
     import SeqDataProduct._
     import SeqToVec._
@@ -546,8 +545,4 @@ class DataViewSpec extends ChiselFlatSpec {
     val verilog = ChiselStage.emitVerilog(new MyModule)
     verilog should include ("assign out = b;")
   }
-
-  // TODO Tests to write
-  // Stuff using Modules (the DataProduct is unfinished)
-  // Aggregate View on target side of another mapping where 1 field comes from outside (should error)
 }
