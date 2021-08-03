@@ -8,18 +8,51 @@ import scala.reflect.runtime.universe.WeakTypeTag
 
 import annotation.implicitNotFound
 
-// TODO can this be a trait?
-// TODO what about views as the same type? What happens if the width or parameters are different?
 
+/** Mapping between a target type `T` and a view type `V`
+  *
+  * Enables calling `.viewAs[T]` on instances of the target type.
+  *
+  * ==Detailed documentation==
+  *   - [[https://www.chisel-lang.org/chisel3/docs/explanations/dataview Explanation]]
+  *   - [[https://www.chisel-lang.org/chisel3/docs/cookbooks/dataview Cookbook]]
+  *
+  * @example {{{
+  * class Foo(val w: Int) extends Bundle {
+  *   val a = UInt(w.W)
+  * }
+  * class Bar(val w: Int) extends Bundle {
+  *   val b = UInt(w.W)
+  * }
+  * // DataViews are created using factory methods in the companion object
+  * implicit val view = DataView[Foo, Bar](
+  *   // The first argument is a function constructing a Foo from a Bar
+  *   foo => new Bar(foo.w)
+  *   // The remaining arguments are a variable number of field pairings
+  *   _.a -> _.b
+  * )
+  * }}}
+  *
+  * @tparam T Target type (must have an implementation of [[DataProduct]])
+  * @tparam V View type
+  * @see [[DataView$ object DataView]] for factory methods
+  * @see [[PartialDataView object PartialDataView]] for defining non-total `DataViews`
+  */
 @implicitNotFound("Could not find implicit value for DataView[${T}, ${V}].\n" +
   "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview")
 sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
+  /** Function constructing an object of the View type from an object of the Target type */
   private[chisel3] val mkView: T => V,
+  /** Function that returns corresponding fields of the target and view */
   private[chisel3] val mapping: (T, V) => Iterable[(Data, Data)],
-  val total: Boolean
+  // Aliasing this with a def below to make the ScalaDoc show up for the field
+  _total: Boolean
 )(
   implicit private[chisel3] val sourceInfo: SourceInfo
 ) {
+  /** Indicates if the mapping contains every field of the target */
+  def total: Boolean = _total
+
   override def toString: String = {
     val base = sourceInfo.makeMessage(x => x)
     val loc = if (base.nonEmpty) base else "@unknown"
@@ -30,10 +63,7 @@ sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
   /** Compose two `DataViews` together to construct a view from the target of this `DataView` to the
     * view type of the second `DataView`
     *
-    * @note Chisel3 uses objects to represent Chisel types. We need a way to derive an object of the
-    *       intermediate type `B` from objects of the given types `A` and `C`.
     * @param g a DataView from `V` to new view-type `V2`
-    * @param gen Function to generate an intermediate "Chisel type" object
     * @tparam V2 View type of `DataView` `g`
     * @return a new `DataView` from the original `T` to new view-type `V2`
     */
@@ -46,24 +76,27 @@ sealed class DataView[T : DataProduct, V <: Data] private[chisel3] (
   }
 }
 
-/** Factory methods for constructing [[DataView]]s
-  *
-  */
+/** Factory methods for constructing [[DataView]]s, see class for example use */
 object DataView {
 
+  /** Default factory method, alias for [[pairs]] */
   def apply[T : DataProduct, V <: Data](mkView: T => V, pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
     DataView.pairs(mkView, pairs: _*)
 
+  /** Construct [[DataView]]s with pairs of functions from the target and view to corresponding fields */
   def pairs[T : DataProduct, V <: Data](mkView: T => V, pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
     mapping(mkView: T => V, swizzle(pairs))
 
+  /** More general factory method for complex mappings */
   def mapping[T : DataProduct, V <: Data](mkView: T => V, mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    new DataView[T, V](mkView, mapping, total = true)
+    new DataView[T, V](mkView, mapping, _total = true)
 
   /** Provides `invert` for invertible [[DataView]]s
     *
     * This must be done as an extension method because it applies an addition constraint on the `Target`
-    * type parameter, namely that it must be a subtype of [[Data]]
+    * type parameter, namely that it must be a subtype of [[Data]].
+    *
+    * @note [[PartialDataView]]s are **not** invertible and will result in an elaboration time exception
     */
   implicit class InvertibleDataView[T <: Data : WeakTypeTag, V <: Data : WeakTypeTag](view: DataView[T, V]) {
     def invert(mkView: V => T): DataView[V, T] = {
@@ -98,17 +131,18 @@ object DataView {
     DataView[A, A](chiselTypeOf.apply, { case (x, y) => (x, y) })
 }
 
-/** Factory methods for constructing non-total [[DataView]]s
-  *
-  */
+/** Factory methods for constructing non-total [[DataView]]s */
 object PartialDataView {
 
+  /** Default factory method, alias for [[pairs]] */
   def apply[T: DataProduct, V <: Data](mkView: T => V, pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
     PartialDataView.pairs(mkView, pairs: _*)
 
+  /** Construct [[DataView]]s with pairs of functions from the target and view to corresponding fields */
   def pairs[T: DataProduct, V <: Data](mkView: T => V, pairs: ((T, V) => (Data, Data))*)(implicit sourceInfo: SourceInfo): DataView[T, V] =
     mapping(mkView, DataView.swizzle(pairs))
 
+  /** More general factory method for complex mappings */
   def mapping[T: DataProduct, V <: Data](mkView: T => V, mapping: (T, V) => Iterable[(Data, Data)])(implicit sourceInfo: SourceInfo): DataView[T, V] =
-    new DataView[T, V](mkView, mapping, total = false)
+    new DataView[T, V](mkView, mapping, _total = false)
 }

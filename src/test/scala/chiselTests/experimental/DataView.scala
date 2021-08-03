@@ -47,8 +47,6 @@ object HWTuple {
 
   class HWTuple2[A <: Data, B <: Data](val _1: A, val _2: B) extends Bundle
 
-  // TODO the fact that we're using .cloneType instead chiselTypeClone is weird but necessary for the
-  // Mux test below, need to figure this out and fix it
   implicit def view[T1 : DataProduct, T2 : DataProduct, V1 <: Data, V2 <: Data](
     implicit v1: DataView[T1, V1], v2: DataView[T2, V2]
   ): DataView[(T1, T2), HWTuple2[V1, V2]] =
@@ -84,7 +82,6 @@ object SeqToVec {
   import SeqDataProduct._
 
   // TODO this would need a better way to determine the prototype for the Vec
-  // TODO hoist this above into an object to share between tests
   implicit def seqVec[A : DataProduct, B <: Data](implicit dv: DataView[A, B]): DataView[Seq[A], Vec[B]] =
     DataView.mapping[Seq[A], Vec[B]](
       xs => Vec(xs.size, chiselTypeClone(xs.head.viewAs[B])), // xs.head is not correct in general
@@ -254,15 +251,16 @@ class DataViewSpec extends ChiselFlatSpec {
   }
 
   it should "work in UInt operations" in {
+    class MyBundle extends Bundle {
+      val value = UInt(8.W)
+    }
     class MyModule extends Module {
       val a = IO(Input(UInt(8.W)))
-      val b = IO(Input(new Bundle {
-        val value = UInt(8.W)
-      }))
+      val b = IO(Input(new MyBundle))
       val cond = IO(Input(Bool()))
       val and, mux, bitsCat = IO(Output(UInt(8.W)))
       // Chisel unconditionally emits a node, so name it at least
-      val x = a.viewAs[UInt] & b.value.viewAs[UInt]
+      val x = a.viewAs[UInt] & b.viewAs[MyBundle].value
       and.viewAs[UInt] := x
 
       val y = Mux(cond.viewAs[Bool], a.viewAs[UInt], b.value.viewAs[UInt])
@@ -270,7 +268,7 @@ class DataViewSpec extends ChiselFlatSpec {
 
       // TODO should we have a macro so that we don't need .apply?
       val aBits = a.viewAs[UInt].apply(3, 0)
-      val bBits = b.value.viewAs[UInt].apply(3, 0)
+      val bBits = b.viewAs[MyBundle].value(3, 0)
       val abCat = aBits.viewAs[UInt] ## bBits.viewAs[UInt]
       bitsCat := abCat
     }
@@ -457,8 +455,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out := in.viewAs[BundleB]
     }
-    // TODO more precise Exception type
-    val err = the [Exception] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the [InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
     err.toString should include ("View mapping must only contain Elements within the Target")
   }
 
@@ -477,8 +474,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out.viewAs[BundleA] := in
     }
-    // TODO more precise Exception type
-    val err = the [Exception] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the [InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
     err.toString should include ("View mapping must only contain Elements within the View")
   }
 
@@ -495,8 +491,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out := in.viewAs[BundleB]
     }
-    // TODO more precise Exception type
-    val err = the [Exception] thrownBy ChiselStage.emitChirrtl(new MyModule)
+    val err = the [InvalidViewException] thrownBy ChiselStage.emitChirrtl(new MyModule)
     val expected = """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <8>""".r
     err.getMessage should fullyMatch regex expected
   }
@@ -514,8 +509,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out := in.viewAs[BundleB]
     }
-    // TODO more precise Exception type
-    val err = the [Exception] thrownBy ChiselStage.emitChirrtl(new MyModule)
+    val err = the [InvalidViewException] thrownBy ChiselStage.emitChirrtl(new MyModule)
     val expected = """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <unknown>""".r
     err.getMessage should fullyMatch regex expected
   }

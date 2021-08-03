@@ -34,10 +34,9 @@ abstract class Element extends Data {
       case Some(litArg) => Some(ElementLitBinding(litArg))
       case _ => Some(DontCareBinding())
     }
-    case Some(AggregateViewBinding(viewMap, _)) => viewMap.get(this) match {
+    case Some(b @ AggregateViewBinding(viewMap, _)) => viewMap.get(this) match {
       case Some(elt) => Some(ViewBinding(elt))
-        // TODO provide nice error message
-      case _ => ???
+      case _ => throwException(s"Internal Error! $this missing from topBinding $b")
     }
     case topBindingOpt => topBindingOpt
   }

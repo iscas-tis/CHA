@@ -3,7 +3,7 @@
 package chisel3.experimental.dataview
 
 import chisel3.experimental.BaseModule
-import chisel3.{Data, RawModule, getRecursiveFields}
+import chisel3.{Data, getRecursiveFields}
 
 import scala.annotation.implicitNotFound
 
@@ -11,7 +11,12 @@ import scala.annotation.implicitNotFound
   *
   * This is needed for validating [[DataView]]s targeting type `A`.
   * Can be thought of as "can be the Target of a DataView".
+  *
+  * Chisel provides some implementations in [[DataProduct$ object DataProduct]] that are available
+  * by default in the implicit scope.
+  *
   * @tparam A Type that has elements of type [[Data]]
+  * @see [[https://www.chisel-lang.org/chisel3/docs/explanations/dataview#dataproduct Detailed Documentation]]
   */
 @implicitNotFound("Could not find implicit value for DataProduct[${A}].\n" +
   "Please see https://www.chisel-lang.org/chisel3/docs/explanations/dataview#dataproduct")
@@ -36,12 +41,18 @@ trait DataProduct[-A] {
   def dataSet(a: A): Data => Boolean = dataIterator(a, "").map(_._1).toSet
 }
 
+/** Encapsulating object for automatically provided implementations of [[DataProduct]]
+  *
+  * @note DataProduct implementations provided in this object are available in the implicit scope
+  */
 object DataProduct {
+  /** [[DataProduct]] implementation for [[Data]] */
   implicit val dataDataProduct: DataProduct[Data] = new DataProduct[Data] {
     def dataIterator(a: Data, path: String): Iterator[(Data, String)] =
-      getRecursiveFields(a, path).iterator
+      getRecursiveFields.lazily(a, path).iterator
   }
 
+  /** [[DataProduct]] implementation for [[BaseModule]] */
   implicit val userModuleDataProduct: DataProduct[BaseModule] = new DataProduct[BaseModule] {
     def dataIterator(a: BaseModule, path: String): Iterator[(Data, String)] = {
       a.getIds.iterator.flatMap {
@@ -54,6 +65,7 @@ object DataProduct {
     // Overridden for performance
     override def dataSet(a: BaseModule): Data => Boolean = {
       val lastId = a._lastId // Not cheap to compute
+      // Return a function
       e => e._id > a._id && e._id <= lastId
     }
   }

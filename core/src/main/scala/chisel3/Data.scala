@@ -552,7 +552,7 @@ abstract class Data extends HasId with NamedComponent with SourceInfoDoc {
       case Some(AggregateViewBinding(viewMap, _)) =>
         viewMap.get(this) match {
           case None => materializeWire() // FIXME FIRRTL doesn't have Aggregate Init expressions
-          // This should not be possible, .topBinding should return a ViewBinding
+          // This should not be possible because Element does the lookup in .topBindingOpt
           case x: Some[_] => throwException(s"Internal Error: In .ref for $this got '$topBindingOpt' and '$x'")
         }
       // Literals

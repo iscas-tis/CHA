@@ -13,8 +13,11 @@ import scala.collection.immutable.LazyList // Needed for 2.12 alias
 package object dataview {
   case class InvalidViewException(message: String) extends ChiselException(message)
 
-  // TODO is this right place to put this?
-  /** Provides `viewAs` for types that are supported as [[DataView]] targets */
+  // TODO should we move the `DataProduct` requirement to `viewAs`
+  /** Provides `viewAs` for types that have an implementation of [[DataProduct]]
+    *
+    * Calling `viewAs` also requires an implementation of [[DataView]] for the target type
+    */
   implicit class DataViewable[T : DataProduct](target: T) {
     //def viewAs[V <: Data](view: V)(implicit dataView: DataView[T, V]): V = {
     def viewAs[V <: Data](implicit dataView: DataView[T, V]): V = {
@@ -42,9 +45,9 @@ package object dataview {
     "Please see https://www.chisel-lang.org/chisel3/docs/cookbooks/dataview")
   private type SubTypeOf[A, B] = A <:< B
 
+  /** Provides `viewAsSupertype` for subclasses of [[Bundle]] */
   implicit class BundleUpcastable[T <: Bundle](target: T) {
-    /** View a [[Bundle]] or [[Record]] as a parent type (upcast)
-      */
+    /** View a [[Bundle]] or [[Record]] as a parent type (upcast) */
     def viewAsSupertype[V <: Bundle](proto: V)(implicit ev: SubTypeOf[T, V], sourceInfo: SourceInfo): V = {
       implicit val dataView = PartialDataView.mapping[T, V](_ => proto, {
         case (a, b) =>
@@ -78,9 +81,7 @@ package object dataview {
   // TODO should this be moved to class Aggregate / can it be unified with Aggregate.bind?
   private def doBind[T : DataProduct, V <: Data](target: T, view: V, dataView: DataView[T, V]): Unit = {
     val mapping = dataView.mapping(target, view)
-    // We don't have a static way to determine if a Record viewed as it's own type is total (see RecordAsParentView)
-    //def isRecordIdentityView = dataView.isInstanceOf[RecordAsParentView[_, _]] && target.asInstanceOf[Record].typeEquivalent(view)
-    val total = dataView.total // || isRecordIdentityView
+    val total = dataView.total
     // Lookups to check the mapping results
     val viewFieldLookup: Map[Data, String] = getRecursiveFields(view, "_").toMap
     val targetContains: Data => Boolean = implicitly[DataProduct[T]].dataSet(target)
@@ -99,17 +100,16 @@ package object dataview {
     def onElt(te: Element, ve: Element): Unit = {
       // TODO can/should we aggregate these errors?
       def err(name: String, arg: Data) =
-        throw new Exception(s"View mapping must only contain Elements within the $name, got $arg")
+        throw InvalidViewException(s"View mapping must only contain Elements within the $name, got $arg")
 
       // The elements may themselves be views, look through the potential chain of views for the Elements
       // that are actually members of the target or view
       val tex = unfoldView(te).find(targetContains).getOrElse(err("Target", te))
       val vex = unfoldView(ve).find(viewFieldLookup.contains).getOrElse(err("View", ve))
 
-      // TODO need to check widths but a less strict version than typeEquivalent
       if (tex.getClass != vex.getClass) {
         val fieldName = viewFieldName(vex)
-        throw new Exception(s"Field $fieldName specified as view of non-type-equivalent value $tex")
+        throw InvalidViewException(s"Field $fieldName specified as view of non-type-equivalent value $tex")
       }
       // View width must be unknown or match target width
       if (vex.widthKnown && vex.width != tex.width) {
@@ -117,7 +117,7 @@ package object dataview {
         val fieldName = viewFieldName(vex)
         val vwidth = widthAsString(vex)
         val twidth = widthAsString(tex)
-        throw new Exception(s"View field $fieldName has width ${vwidth} that is incompatible with target value $tex's width ${twidth}")
+        throw InvalidViewException(s"View field $fieldName has width ${vwidth} that is incompatible with target value $tex's width ${twidth}")
       }
       childBindings(vex) += tex
     }
@@ -130,7 +130,7 @@ package object dataview {
       case (aa: Aggregate, ba: Aggregate) =>
         if (!ba.typeEquivalent(aa)) {
           val fieldName = viewFieldLookup(ba)
-          throw new Exception(s"field $fieldName specified as view of non-type-equivalent value $aa")
+          throw InvalidViewException(s"field $fieldName specified as view of non-type-equivalent value $aa")
         }
         getMatchedFields(aa, ba).foreach {
           case (aelt: Element, belt: Element) => onElt(aelt, belt)
@@ -151,7 +151,7 @@ package object dataview {
           viewNonTotalErrors = data :: viewNonTotalErrors
           data.asInstanceOf[Element] // Return the Data itself, will error after this map, cast is safe
         case x =>
-          throw new Exception(s"Got $x, expected Seq(_: Direct)")
+          throw InvalidViewException(s"Got $x, expected Seq(_: Direct)")
       }
       // TODO record and report aliasing errors
       targetSeen.foreach(_ += targetsx)
