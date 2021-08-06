@@ -14,6 +14,7 @@ import org.scalacheck._
 import org.scalatest._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -94,6 +95,9 @@ abstract class ChiselFlatSpec extends AnyFlatSpec with ChiselRunners with Matche
 
 /** Spec base class for BDD-style testers. */
 abstract class ChiselFreeSpec extends AnyFreeSpec with ChiselRunners with Matchers
+
+/** Spec base class for BDD-style testers. */
+abstract class ChiselFunSpec extends AnyFunSpec with ChiselRunners with Matchers
 
 /** Spec base class for property-based testers. */
 abstract class ChiselPropSpec extends AnyPropSpec with ChiselRunners with ScalaCheckPropertyChecks with Matchers {

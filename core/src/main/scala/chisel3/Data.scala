@@ -342,7 +342,7 @@ abstract class Data extends HasId with NamedComponent with SourceInfoDoc {
   private[chisel3] final def isSynthesizable: Boolean = _binding.map {
     case ChildBinding(parent) => parent.isSynthesizable
     case _: TopBinding => true
-    case _: XMRBinding => true
+    case XMRBinding => true
     case (_: SampleElementBinding[_] | _: MemTypeBinding[_]) => false
   }.getOrElse(false)
 
@@ -658,7 +658,7 @@ object XMR {
     x.setRef(that.getRef, true)
 
     // Bind each element of x to being a Wire
-    x.bind(internal.XMRBinding(ctx))
+    x.bind(internal.XMRBinding)
     x
   }
 }

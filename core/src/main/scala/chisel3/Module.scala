@@ -182,8 +182,15 @@ package internal {
   import chisel3.experimental.BaseModule
 
   object BaseModule {
+    trait IsClone[T] {
+      val _proto: T
+      def getProto: T = _proto
+      def isACloneOf(a: Any): Boolean = this == a || _proto == a
+    }
     // Private internal class to serve as a _parent for Data in cloned ports
-    private[chisel3] class ModuleClone(_proto: BaseModule) extends BaseModule {
+    class ModuleClone[T <: BaseModule] private[chisel3] (val _proto: T) extends BaseModule with IsClone[T] {
+      override def toString = s"ModuleClone(${_proto})"
+      def getPorts = _portsRecord
       // ClonePorts that hold the bound ports for this module
       // Used for setting the refs of both this module and the Record
       private[BaseModule] var _portsRecord: Record = _
@@ -194,12 +201,17 @@ package internal {
         _component = _proto._component
         None
       }
+      private[chisel3] lazy val ioMap: Map[Data, Data] = {
+        val name2Port = getPorts.elements
+        _proto.getChiselPorts.map { case (name, data) => data -> name2Port(name) }.toMap
+      }
       // This module doesn't acutally exist in the FIRRTL so no initialization to do
       private[chisel3] def initializeInParent(parentCompileOptions: CompileOptions): Unit = ()
 
       override def desiredName: String = _proto.name
 
       private[chisel3] def setRefAndPortsRef(namespace: Namespace): Unit = {
+        //require(this.getOptionRef.isEmpty)
         val record = _portsRecord
         // Use .forceName to re-use default name resolving behavior
         record.forceName(None, default=this.desiredName, namespace)
@@ -210,8 +222,32 @@ package internal {
         }
         // Set both the record and the module to have the same instance name
         record.setRef(ModuleCloneIO(_proto, instName), force=true) // force because we did .forceName first
+        //println(s"In setRefAndPortsRef: $instName")
         this.setRef(Ref(instName))
       }
+    }
+
+    // proto must be an Either as we could be cloning a ModuleClone! But... why should that matter?
+    // We need to know the instanceName!
+    final class InstanceClone[T <: BaseModule] private[chisel3] (val _proto: T, val instName: () => String) extends BaseModule with IsClone[T] {
+      override def toString = s"InstanceClone(${_proto})"
+      // Don't generate a component, but point to the one for the cloned Module
+      private[chisel3] def generateComponent(): Option[Component] = None
+
+      private[chisel3] def setAsInstanceRef(): Unit = {
+        //require(this.getOptionRef.isEmpty)
+        this.setRef(Ref(instName()))
+      }
+      override def instanceName = instName()
+      // This module doesn't acutally exist in the FIRRTL so no initialization to do
+      private[chisel3] def initializeInParent(parentCompileOptions: CompileOptions): Unit = ()
+
+      override def desiredName: String = _proto.name
+    }
+
+    // If we are cloning a non-module, we need another object which has the proper _parent set!
+    final class InstantiableClone[T <: IsInstantiable] private[chisel3] (val _proto: T) extends IsClone[T] {
+      private[chisel3] var _parent: Option[BaseModule] = internal.Builder.currentModule
     }
 
     /** Record type returned by CloneModuleAsRecord
@@ -226,7 +262,7 @@ package internal {
     }
 
     // Recursively set the parent of the start Data and any children (eg. in an Aggregate)
-    private def setAllParents(start: Data, parent: Option[BaseModule]): Unit = {
+    private[chisel3] def setAllParents(start: Data, parent: Option[BaseModule]): Unit = {
       def rec(data: Data): Unit = {
         data._parent = parent
         data match {
@@ -238,12 +274,11 @@ package internal {
       rec(start)
     }
 
-    private[chisel3] def cloneIORecord(proto: BaseModule)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): ClonePorts = {
+    private[chisel3] def createIORecord[T <: BaseModule](cloneParent: ModuleClone[T])(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): ClonePorts = {
+      val proto = cloneParent._proto
       require(proto.isClosed, "Can't clone a module before module close")
+      require(cloneParent.getOptionRef.isEmpty, "Can't have ref set already!")
       // Fake Module to serve as the _parent of the cloned ports
-      // We make this before clonePorts because we want it to come up first in naming in
-      // currentModule
-      val cloneParent = Module(new ModuleClone(proto))
       // We don't create this inside the ModuleClone because we need the ref to be set by the
       // currentModule (and not clonePorts)
       val clonePorts = new ClonePorts(proto.getModulePorts: _*)
@@ -260,6 +295,15 @@ package internal {
       }
       clonePorts
     }
+
+    private[chisel3] def cloneIORecord(proto: BaseModule)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): ClonePorts = {
+      require(proto.isClosed, "Can't clone a module before module close")
+      // Fake Module to serve as the _parent of the cloned ports
+      // We make this before clonePorts because we want it to come up first in naming in
+      // currentModule
+      val cloneParent = Module(new ModuleClone(proto))
+      createIORecord(cloneParent)
+    }
   }
 }
 
@@ -268,7 +312,7 @@ package experimental {
   /** Abstract base class for Modules, an instantiable organizational unit for RTL.
     */
   // TODO: seal this?
-  abstract class BaseModule extends HasId with IsInstantiable {
+  abstract class BaseModule extends HasId {
     _parent.foreach(_.addId(this))
 
     //
@@ -370,7 +414,7 @@ package experimental {
       // ModuleAspects and ModuleClones are not "true modules" and thus should share
       // their original modules names without uniquification
       this match {
-        case (_: ModuleAspect | _: internal.BaseModule.ModuleClone) => desiredName
+        case (_: ModuleAspect | _: internal.BaseModule.IsClone[_]) => desiredName
         case _ => Builder.globalNamespace.name(desiredName)
       }
     } catch {
@@ -383,13 +427,18 @@ package experimental {
       *
       * @note Should not be called until circuit elaboration is complete
       */
-    final def toNamed: ModuleName = toTarget.toNamed
+    final def toNamed: ModuleName = ModuleTarget(this.circuitName, this.name).toNamed
 
     /** Returns a FIRRTL ModuleTarget that references this object
       *
       * @note Should not be called until circuit elaboration is complete
       */
-    final def toTarget: ModuleTarget = ModuleTarget(this.circuitName, this.name)
+    def toTarget: IsModule = {
+      this match {
+        case m: internal.BaseModule.IsClone[_] => m._parent.get.toTarget.instOf(instanceName, name)
+        case m => ModuleTarget(this.circuitName, this.name)
+      }
+    }
 
     /** Returns a FIRRTL ModuleTarget that references this object
       *
