@@ -250,6 +250,14 @@ class InstanceSpec extends ChiselFunSpec with Utils {
       def f(i: Seq[Instance[Viewer]]): Data = i.head.x.i0.innerWire
       check(new Top(), "~Top|AddTwo/i0:AddOne>innerWire".rt, "blah")
     }
+    it("4.2: should work on options of modules") {
+      class Top() extends MultiIOModule {
+        val is: Option[AddTwo] = Some(Module(new AddTwo()))
+        mark(f(is), "blah")
+      }
+      def f(i: Option[Instance[AddTwo]]): Data = i.get.i0.innerWire
+      check(new Top(), "~Top|AddTwo/i0:AddOne>innerWire".rt, "blah")
+    }
   }
   describe("5: Absolute Targets should work as expected") {
     it("5.0: toAbsoluteTarget on a port of an instance") {
