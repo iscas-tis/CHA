@@ -17,5 +17,5 @@ object Annotations {
   def mark(d: Data, tag: String): Unit = annotate(MarkChiselAnnotation(d, tag, false))
   def mark[B <: BaseModule](d: Instance[B], tag: String): Unit = annotate(MarkChiselInstanceAnnotation(d, tag, false))
   def amark(d: Data, tag: String): Unit = annotate(MarkChiselAnnotation(d, tag, true))
-  //def amark[B <: BaseModule](d: Instance[B], tag: String): Unit = annotate(MarkChiselInstanceAnnotation(d, tag, true))
+  def amark[B <: BaseModule](d: Instance[B], tag: String): Unit = annotate(MarkChiselInstanceAnnotation(d, tag, true))
 }

@@ -43,6 +43,7 @@ object Module extends SourceInfoDoc {
     Builder.clearPrefix()
     Builder.currentClock = None
     Builder.currentReset = None
+
     // Execute the module, this has the following side effects:
     //   - set currentModule
     //   - unset readyForModuleConstr

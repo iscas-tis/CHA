@@ -44,6 +44,12 @@ case class Instance[A] private [chisel3] (val cloned: Either[A, IsClone[A]]) {
     case Right(x: chisel3.internal.BaseModule.InstanceClone[_]) => x.toTarget
     case other => throw new Exception(s"toTarget is not supported on $this")
   }
+  def toAbsoluteTarget = cloned match {
+    case Left(x: BaseModule) => x.toAbsoluteTarget
+    case Right(x: chisel3.internal.BaseModule.ModuleClone[_]) => x.toAbsoluteTarget
+    case Right(x: chisel3.internal.BaseModule.InstanceClone[_]) => x.toAbsoluteTarget
+    case other => throw new Exception(s"toAbsoluteTarget is not supported on $this")
+  }
 }
 object Instance extends SourceInfoDoc {
   /** A wrapper method that all Module instantiations must be wrapped in

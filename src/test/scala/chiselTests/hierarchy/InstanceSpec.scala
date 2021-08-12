@@ -305,6 +305,13 @@ class InstanceSpec extends ChiselFunSpec with Utils {
       }
       check(new Top(), "~Top|Top/i:InstantiatesHasVec/i1:HasVec_2>x[0].x".rt, "blah")
     }
+    it("5.5: toAbsoluteTarget on a subinstance") {
+      class Top() extends MultiIOModule {
+        val i = Instance(Definition(new AddTwo()))
+        amark(i.i1, "blah")
+      }
+      check(new Top(), "~Top|Top/i:AddTwo/i1:AddOne".it, "blah")
+    }
   }
   describe("Select api's handle instanceClone properly"){}
 }

@@ -140,7 +140,6 @@ object Examples {
   class HasPublicConstructorArgs(@public val int: Int) extends MultiIOModule {
     @public val x = Wire(UInt(3.W))
   }
-
   @instantiable
   class InstantiatesHasVec() extends MultiIOModule {
     @public val i0 = Instance(Definition(new HasVec()))
