@@ -8,7 +8,7 @@ import chisel3._
 import chisel3.experimental._
 import chisel3.internal.firrtl._
 import chisel3.internal.naming._
-import _root_.firrtl.annotations.{CircuitName, ComponentName, IsMember, ModuleName, Named, ReferenceTarget, ModuleTarget}
+import _root_.firrtl.annotations.{CircuitName, ComponentName, IsMember, ModuleName, Named, ReferenceTarget}
 import _root_.firrtl.annotations.AnnotationUtils.validComponentName
 import _root_.firrtl.AnnotationSeq
 import chisel3.internal.Builder.Prefix
@@ -17,10 +17,8 @@ import logger.LazyLogging
 import scala.collection.mutable
 
 private[chisel3] class Namespace(keywords: Set[String]) {
-  private[chisel3] val names = collection.mutable.HashMap[String, Long]()
-  def copyTo(other: Namespace): Unit = names.foreach { case (s: String, l: Long) =>
-    other.names(s) = l
-  }
+  private val names = collection.mutable.HashMap[String, Long]()
+  def copyTo(other: Namespace): Unit = names.foreach { case (s: String, l: Long) => other.names(s) = l }
   for (keyword <- keywords)
     names(keyword) = 1
 
@@ -86,9 +84,9 @@ trait InstanceId {
 }
 
 private[chisel3] trait HasId extends InstanceId {
-  private[chisel3] var _parent: Option[BaseModule] = internal.Builder.currentModule
-  private[chisel3] var _circuit: Option[BaseModule] = None
   private[chisel3] def _onModuleClose: Unit = {}
+  private[chisel3] var _parent: Option[BaseModule] = Builder.currentModule
+  private[chisel3] var _circuit: Option[BaseModule] = None
 
   private[chisel3] val _id: Long = Builder.idGen.next
 
@@ -230,6 +228,7 @@ private[chisel3] trait HasId extends InstanceId {
         case (None, d: Data) if d.topBindingOpt == Some(XMRBinding) => _ref.get.localName
         case (None, _) => throwException(s"signalName/pathName should be called after circuit elaboration: $this, ${_parent}")
       }
+    case None => throwException("this cannot happen")
   }
   def pathName: String = _parent match {
     case None => instanceName
@@ -274,7 +273,6 @@ private[chisel3] trait HasId extends InstanceId {
 }
 /** Holds the implementation of toNamed for Data and MemBase */
 private[chisel3] trait NamedComponent extends HasId {
-
   /** Returns a FIRRTL ComponentName that references this object
     * @note Should not be called until circuit elaboration is complete
     */
@@ -294,7 +292,7 @@ private[chisel3] trait NamedComponent extends HasId {
       case other =>
         throw _root_.firrtl.annotations.Target.NamedException(s"Cannot convert $name into [[ReferenceTarget]]: $other")
     }
-  } 
+  }
 
   final def toAbsoluteTarget: ReferenceTarget = {
     val localTarget = toTarget
@@ -314,7 +312,6 @@ private[chisel3] class ChiselContext() {
 
   // Records the different prefixes which have been scoped at this point in time
   var prefixStack: Prefix = Nil
-
 }
 
 private[chisel3] class DynamicContext(val annotationSeq: AnnotationSeq) {
@@ -621,8 +618,6 @@ private[chisel3] object Builder extends LazyLogging {
           namer(m.getPorts, prefix)
         case Right(m) =>
       }
-      //println(id.ports.get)
-      //nameRecursively(prefix, id.ports.get, namer)
     case (id: HasId) => namer(id, prefix)
     case Some(elt) => nameRecursively(prefix, elt, namer)
     case (iter: Iterable[_]) if iter.hasDefiniteSize =>

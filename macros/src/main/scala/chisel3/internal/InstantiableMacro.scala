@@ -6,43 +6,11 @@ import scala.reflect.macros.whitebox
 import scala.reflect.macros.blackbox
 
 
-object publicMacro {
-  //def impl(c: blackbox.Context)(annottees: c.Tree*): c.Tree = {
-  //  import c.universe._
-  //  import Flag._
-  //  val result = {
-  //    //println(annottees)
-  //    val tpname = TypeName(c.internal.enclosingOwner.toString.stripPrefix("class "))
-  //    println(tpname)
-
-  //    annottees.toList match {
-  //      case Seq(x@q"val $valname: $tpe = $name") if valname.toString() == name.toString() =>
-  //         val name2 = TypeName(valname.+(c.freshName()))
-  //         val extension = q"def $valname: $tpe = module(_.$valname)"
-  //         println(s"POSITION: ${extension.pos}")
-  //         q""" implicit class $name2(module: chisel3.Instance[$tpname]) { $extension } """
-  //      case Seq(x@q"val $valname: $tpe = $_") =>
-  //         val name2 = TypeName(valname.+(c.freshName()))
-  //         val extension = q"def $valname: $tpe = module(_.$valname)"
-  //         println(s"XPOSITION: ${extension.pos}")
-  //         q"""
-  //           implicit class $name2(module: chisel3.Instance[$tpname]) { $extension }
-
-  //           $x
-  //           """
-  //    }
-  //  }
-  //  val x = q"..$result"
-  //  println(x)
-  //  x
-  //}
-}
-object instanceMacro {
+object instantiableMacro {
   def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
     import c.universe._
     import Flag._
     val result = {
-      //println(annottees)
       val (clz, objOpt) = annottees.map(_.tree).toList match {
         case Seq(c, o) => (c, Some(o))
         case Seq(c) => (c, None)
@@ -88,8 +56,6 @@ object instanceMacro {
 }
 
 class instantiable extends StaticAnnotation {
-  def macroTransform(annottees: Any*): Any = macro instanceMacro.impl
+  def macroTransform(annottees: Any*): Any = macro instantiableMacro.impl
 }
-class public extends StaticAnnotation {
-  //def macroTransform(annottees: Any*): Any = macro publicMacro.impl
-}
+class public extends StaticAnnotation

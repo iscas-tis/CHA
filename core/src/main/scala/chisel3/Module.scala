@@ -194,6 +194,9 @@ package internal {
       // ClonePorts that hold the bound ports for this module
       // Used for setting the refs of both this module and the Record
       private[BaseModule] var _portsRecord: Record = _
+      // This is necessary for correctly supporting .toTarget on a Module Clone. If it is made from the
+      // Instance/Definition API, it should return an instanceTarget. If made from CMAR, it should return a
+      // ModuleTarget.
       private[chisel3]    var _madeFromDefinition: Boolean = false
       // Don't generate a component, but point to the one for the cloned Module
       private[chisel3] def generateComponent(): Option[Component] = {
@@ -212,7 +215,6 @@ package internal {
       override def desiredName: String = _proto.name
 
       private[chisel3] def setRefAndPortsRef(namespace: Namespace): Unit = {
-        //require(this.getOptionRef.isEmpty)
         val record = _portsRecord
         // Use .forceName to re-use default name resolving behavior
         record.forceName(None, default=this.desiredName, namespace)
@@ -223,7 +225,6 @@ package internal {
         }
         // Set both the record and the module to have the same instance name
         record.setRef(ModuleCloneIO(_proto, instName), force=true) // force because we did .forceName first
-        //println(s"In setRefAndPortsRef: $instName")
         this.setRef(Ref(instName))
       }
     }
@@ -236,7 +237,6 @@ package internal {
       private[chisel3] def generateComponent(): Option[Component] = None
 
       private[chisel3] def setAsInstanceRef(): Unit = {
-        //require(this.getOptionRef.isEmpty)
         this.setRef(Ref(instName()))
       }
       override def instanceName = instName()
@@ -275,8 +275,12 @@ package internal {
       rec(start)
     }
 
-    private[chisel3] def createIORecord[T <: BaseModule](cloneParent: ModuleClone[T])(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): ClonePorts = {
-      val proto = cloneParent._proto
+    private[chisel3] def cloneIORecord(proto: BaseModule)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): ClonePorts = {
+      require(proto.isClosed, "Can't clone a module before module close")
+      // Fake Module to serve as the _parent of the cloned ports
+      // We make this before clonePorts because we want it to come up first in naming in
+      // currentModule
+      val cloneParent = Module(new ModuleClone(proto))
       require(proto.isClosed, "Can't clone a module before module close")
       require(cloneParent.getOptionRef.isEmpty, "Can't have ref set already!")
       // Fake Module to serve as the _parent of the cloned ports
@@ -295,15 +299,6 @@ package internal {
         clonePorts("reset") := Module.reset
       }
       clonePorts
-    }
-
-    private[chisel3] def cloneIORecord(proto: BaseModule)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): ClonePorts = {
-      require(proto.isClosed, "Can't clone a module before module close")
-      // Fake Module to serve as the _parent of the cloned ports
-      // We make this before clonePorts because we want it to come up first in naming in
-      // currentModule
-      val cloneParent = Module(new ModuleClone(proto))
-      createIORecord(cloneParent)
     }
   }
 }
@@ -448,7 +443,6 @@ package experimental {
       * @note Should not be called until circuit elaboration is complete
       */
     final def toAbsoluteTarget: IsModule = {
-      //require(!isTemplate, "Cannot use toAbsoluteTarget on a template! Use other API I'm creating.")
       _parent match {
         case Some(parent) => parent.toAbsoluteTarget.instOf(this.instanceName, name)
         case None => toTarget

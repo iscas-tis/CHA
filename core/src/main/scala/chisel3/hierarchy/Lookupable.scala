@@ -13,29 +13,13 @@ import scala.language.dynamics
 trait IsInstantiable extends Dynamic {
   def selectDynamic(name: String) = throw new Exception(s"Cannot call method $name on $this!")
 }
-//@implicitNotFound("@instance is only legal when @public is only on subtypes of Data, BaseModule or Instance[_]")
+@implicitNotFound("@instance is only legal when @public is only on subtypes of Data, BaseModule, IsInstantiable, IsLookupable, or Instance[_], or in a List or Option")
 sealed trait Lookupable[A, -B] {
   type C
   def lookup(that: A => B, ih: Instance[A]): C
 }
 
 object Lookupable {
-  //implicit def lookupModule[A, B <: BaseModule](implicit sourceInfo: SourceInfo, compileOptions: CompileOptions) = new Lookupable[A, B] {
-  //  type C = Instance[B]
-  //  def lookup(that: A => B, ih: Instance[A]): C = {
-  //    val ret = that(ih.definition)
-  //    ih.definition match {
-  //      case definition: BaseModule =>
-  //        val inst = new Instance(() => ret.instanceName, ret, Instance.portMap(ret), ih.context.descend(InstanceContext.getContext(ret)), None)
-  //        inst 
-  //      case _ =>
-  //        new Instance(() => ret.instanceName, ret, Instance.portMap(ret), ih.context.descend(InstanceContext.getContext(ret)), None)
-  //    }
-  //  }
-  //}
-  def allParents(x: internal.HasId): Seq[internal.HasId] = {
-    Seq(x) ++ x._parent.map(allParents).getOrElse(Nil)
-  }
   def cloneDataToContext[T <: Data](child: T, context: BaseModule)
                                (implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T = {
     internal.requireIsHardware(child, "cross module reference type")
@@ -49,21 +33,10 @@ object Lookupable {
             val newChild = child.cloneTypeFull
             newChild.setRef(child.getRef, true)
             newChild.bind(internal.XMRBinding)
-            //setAllBindings(newChild)
             internal.BaseModule.setAllParents(newChild, Some(m))
             newChild
         }
     }
-  }
-  def setAllBindings(start: Data): Unit = {
-    def rec(data: Data): Unit = {
-      data.bind(internal.XMRBinding)
-      data match {
-        case _: Element =>
-        case agg: Aggregate => agg.getElements.foreach(rec)
-      }
-    }
-    rec(start)
   }
   def cloneModuleToContext[T <: BaseModule](child: Either[T, IsClone[T]], context: BaseModule)
                           (implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Either[T, IsClone[T]] = {

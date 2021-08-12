@@ -16,16 +16,15 @@ import chisel3.experimental.BaseModule
 import _root_.firrtl.annotations.{ModuleName, ModuleTarget, IsModule}
 
 object Definition extends SourceInfoDoc {
-  /** A wrapper method that all Module instantiations must be wrapped in
+  /** A wrapper method that all Definition instantiations must be wrapped in
     * (necessary to help Chisel track internal state).
     *
     * @param bc the Module being created
     *
-    * @return the input module `m` with Chisel metadata properly set
+    * @return the input module Definition with Chisel metadata properly set
     */
   def apply[T <: RawModule](bc: => T): Definition[T] = macro InstTransform.apply[T]
 
-  /** @group SourceInfoTransformMacro */
   def do_apply[T <: RawModule](bc: => T) (implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Definition[T] = {
     val dynamicContext = new DynamicContext(Nil)
     Builder.globalNamespace.copyTo(dynamicContext.globalNamespace)
