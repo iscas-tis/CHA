@@ -647,22 +647,6 @@ trait WireFactory {
   }
 }
 
-object XMR {
-  /** Construct a [[XMR]] from a hardware
-    * @param t The template from which to construct this wire
-    */
-  def apply[T <: Data](that: T, ctx: InstanceContext): T = macro SourceInfoTransform.xmrArg
-  def do_apply[T <: Data](that: T, ctx: InstanceContext)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T = {
-    requireIsHardware(that, "cross module reference type")
-    val x = that.cloneTypeFull
-    x.setRef(that.getRef, true)
-
-    // Bind each element of x to being a Wire
-    x.bind(internal.XMRBinding)
-    x
-  }
-}
-
 /** Utility for constructing hardware wires
   *
   * The width of a `Wire` (inferred or not) is copied from the type template

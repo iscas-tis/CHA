@@ -13,7 +13,6 @@ import _root_.firrtl.annotations.AnnotationUtils.validComponentName
 import _root_.firrtl.AnnotationSeq
 import chisel3.internal.Builder.Prefix
 import logger.LazyLogging
-import chisel3.InstanceContext
 
 import scala.collection.mutable
 
@@ -316,8 +315,6 @@ private[chisel3] class ChiselContext() {
   // Records the different prefixes which have been scoped at this point in time
   var prefixStack: Prefix = Nil
 
-  // Records dotting into instances
-  var instanceContext: Option[InstanceContext] = None
 }
 
 private[chisel3] class DynamicContext(val annotationSeq: AnnotationSeq) {
