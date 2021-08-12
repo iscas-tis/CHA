@@ -227,7 +227,7 @@ private[chisel3] trait HasId extends InstanceId {
           case Some(arg) => arg fullName c
           case None => computeName(None, None).get
         }
-        case (None, d: Data) if d.binding == Some(XMRBinding) => _ref.get.localName
+        case (None, d: Data) if d.topBindingOpt == Some(XMRBinding) => _ref.get.localName
         case (None, _) => throwException(s"signalName/pathName should be called after circuit elaboration: $this, ${_parent}")
       }
   }

@@ -75,6 +75,10 @@ case class Node(id: HasId) extends Arg {
     case Some(arg) => arg.contextualName(ctx)
     case None => id.instanceName
   }
+  override def localName: String = id.getOptionRef match {
+    case Some(arg) => arg.localName
+    case None => id.instanceName
+  }
   def name: String = id.getOptionRef match {
     case Some(arg) => arg.name
     case None => id.instanceName

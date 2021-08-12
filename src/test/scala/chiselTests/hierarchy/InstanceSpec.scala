@@ -12,10 +12,14 @@ import chisel3.stage.ChiselGeneratorAnnotation
 import javax.print.attribute.HashPrintRequestAttributeSet
 
 
+
+// TODO/Notes
+// - In backport, clock/reset are not automatically assigned. I think this is fixed in 3.5
+// - CircuitTarget for annotations on the definition are wrong - needs to be fixed.
 class InstanceSpec extends ChiselFunSpec with Utils {
   import Annotations._
   import Examples._
-  describe("0: Names of instances") {
+  describe("0: Instance instantiation") {
     it("0.0: name of an instance should be correct") {
       class Top extends MultiIOModule {
         val definition = Definition(new AddOne)
@@ -230,6 +234,53 @@ class InstanceSpec extends ChiselFunSpec with Utils {
       }
       def f(i: Seq[Instance[Viewer]]): Data = i.head.x.i0.innerWire
       check(new Top(), "~Top|AddTwo/i0:AddOne>innerWire".rt, "blah")
+    }
+  }
+  describe("5: Absolute Targets should work as expected") {
+    it("5.0: toAbsoluteTarget on a port of an instance") {
+      class Top() extends MultiIOModule {
+        val i = Instance(Definition(new AddTwo()))
+        amark(i.in, "blah")
+      }
+      check(new Top(), "~Top|Top/i:AddTwo>in".rt, "blah")
+    }
+    it("5.1: toAbsoluteTarget on a subinstance's data within an instance") {
+      class Top() extends MultiIOModule {
+        val i = Instance(Definition(new AddTwo()))
+        amark(i.i0.innerWire, "blah")
+      }
+      check(new Top(), "~Top|Top/i:AddTwo/i0:AddOne>innerWire".rt, "blah")
+    }
+    it("5.2: toAbsoluteTarget on a submodule's data within an instance") {
+      class Top() extends MultiIOModule {
+        val i = Instance(Definition(new AddTwoMixedModules()))
+        amark(i.i1.in, "blah")
+      }
+      check(new Top(), "~Top|Top/i:AddTwoMixedModules/i1:AddOne_2>in".rt, "blah")
+    }
+    it("5.3: toAbsoluteTarget on a submodule's data, in an aggregate, within an instance") {
+      class Top() extends MultiIOModule {
+        val i = Instance(Definition(new InstantiatesHasVec()))
+        amark(i.i1.x.head, "blah")
+      }
+      check(new Top(), "~Top|Top/i:InstantiatesHasVec/i1:HasVec_2>x[0]".rt, "blah")
+    }
+    it("5.4: toAbsoluteTarget on a submodule's data, in an aggregate, within an instance, ILit") {
+      class MyBundle extends Bundle { val x = UInt(3.W) }
+      @instantiable
+      class HasVec() extends MultiIOModule {
+        @public val x = Wire(Vec(3, new MyBundle()))
+      }
+      @instantiable
+      class InstantiatesHasVec() extends MultiIOModule {
+        @public val i0 = Instance(Definition(new HasVec()))
+        @public val i1 = Module(new HasVec())
+      }
+      class Top() extends MultiIOModule {
+        val i = Instance(Definition(new InstantiatesHasVec()))
+        amark(i.i1.x.head.x, "blah")
+      }
+      check(new Top(), "~Top|Top/i:InstantiatesHasVec/i1:HasVec_2>x[0].x".rt, "blah")
     }
   }
 }

@@ -450,7 +450,7 @@ package experimental {
     final def toAbsoluteTarget: IsModule = {
       //require(!isTemplate, "Cannot use toAbsoluteTarget on a template! Use other API I'm creating.")
       _parent match {
-        case Some(parent) => parent.toAbsoluteTarget.instOf(this.instanceName, toTarget.module)
+        case Some(parent) => parent.toAbsoluteTarget.instOf(this.instanceName, name)
         case None => toTarget
       }
     }
