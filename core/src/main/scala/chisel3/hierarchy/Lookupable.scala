@@ -32,7 +32,7 @@ object Lookupable {
           case Right(m: BaseModule) =>
             val newChild = child.cloneTypeFull
             newChild.setRef(child.getRef, true)
-            newChild.bind(internal.XMRBinding)
+            newChild.bind(internal.CrossModuleBinding)
             internal.BaseModule.setAllParents(newChild, Some(m))
             newChild
         }
