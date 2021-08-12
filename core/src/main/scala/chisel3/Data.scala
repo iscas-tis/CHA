@@ -342,14 +342,12 @@ abstract class Data extends HasId with NamedComponent with SourceInfoDoc {
   private[chisel3] final def isSynthesizable: Boolean = _binding.map {
     case ChildBinding(parent) => parent.isSynthesizable
     case _: TopBinding => true
-    case XMRBinding => true
     case (_: SampleElementBinding[_] | _: MemTypeBinding[_]) => false
   }.getOrElse(false)
 
   private[chisel3] def topBindingOpt: Option[TopBinding] = _binding.flatMap {
     case ChildBinding(parent) => parent.topBindingOpt
     case bindingVal: TopBinding => Some(bindingVal)
-    //case _: XMRBinding => XM
     case SampleElementBinding(parent) => parent.topBindingOpt
     case _: MemTypeBinding[_] => None
   }
