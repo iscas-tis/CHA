@@ -283,4 +283,7 @@ class InstanceSpec extends ChiselFunSpec with Utils {
       check(new Top(), "~Top|Top/i:InstantiatesHasVec/i1:HasVec_2>x[0].x".rt, "blah")
     }
   }
+  describe("Targets on definition have correct circuit name"){}
+  describe("Don't error on naming instanceclone"){}
+  describe("Select api's handle instanceClone properly"){}
 }

@@ -88,6 +88,7 @@ trait InstanceId {
 
 private[chisel3] trait HasId extends InstanceId {
   private[chisel3] var _parent: Option[BaseModule] = internal.Builder.currentModule
+  private[chisel3] var _circuit: Option[BaseModule] = None
   private[chisel3] def _onModuleClose: Unit = {}
 
   private[chisel3] val _id: Long = Builder.idGen.next
@@ -245,7 +246,10 @@ private[chisel3] trait HasId extends InstanceId {
   }
   // TODO Should this be public?
   protected def circuitName: String = _parent match {
-    case None => instanceName
+    case None => _circuit match {
+      case None => instanceName
+      case Some(o) => o.circuitName
+    }
     case Some(p) => p.circuitName
   }
 
@@ -618,6 +622,7 @@ private[chisel3] object Builder extends LazyLogging {
         case Left(i) =>
         case Right(m: internal.BaseModule.ModuleClone[_]) =>
           namer(m.getPorts, prefix)
+        case Right(m) =>
       }
       //println(id.ports.get)
       //nameRecursively(prefix, id.ports.get, namer)

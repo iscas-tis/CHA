@@ -7,7 +7,7 @@ import chisel3.internal.{HasId}
 import chisel3.experimental.BaseModule
 import chisel3.experimental.FixedPoint
 import chisel3.internal.firrtl._
-import chisel3.internal.BaseModule.ModuleClone
+import chisel3.internal.BaseModule.IsClone
 import firrtl.annotations.ReferenceTarget
 
 import scala.collection.mutable
@@ -114,7 +114,7 @@ object Select {
     module._component.get match {
       case d: DefModule => d.commands.flatMap {
         case i: DefInstance => i.id match {
-          case _: ModuleClone[_] => None
+          case _: IsClone[_] => None
           case other          => Some(other)
         }
         case _ => None
