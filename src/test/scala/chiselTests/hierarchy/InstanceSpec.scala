@@ -27,6 +27,14 @@ class InstanceSpec extends ChiselFunSpec with Utils {
       }
       check(new Top(), "i0", "AddOne")
     }
+    it("0.1: name of an instanceclone should not error") {
+      class Top extends MultiIOModule {
+        val definition = Definition(new AddTwo)
+        val i0 = Instance(definition)
+        val i = i0.i0 // This should not error
+      }
+      check(new Top(), "i0", "AddTwo")
+    }
   }
   describe("1: Annotations on instances in same chisel compilation") {
     it("1.0: should work on a single instance, annotating the instance") {
@@ -108,6 +116,13 @@ class InstanceSpec extends ChiselFunSpec with Utils {
         mark(i0.containerContainer.container.i0, "i0.i0")
       }
       check(new Top(), "~Top|Top/i0:AddOneWithInstantiableInstantiable/i0:AddOne".it, "i0.i0")
+    }
+    it("1.10: should work for targets on definition to have correct circuit name"){
+      class Top extends MultiIOModule {
+        val definition = Definition(new AddOneWithAnnotation)
+        val i0 = Instance(definition)
+      }
+      check(new Top(), "~Top|AddOneWithAnnotation>innerWire".rt, "innerWire")
     }
   }
   describe("2: Annotations on designs not in the same chisel compilation") {
@@ -283,7 +298,5 @@ class InstanceSpec extends ChiselFunSpec with Utils {
       check(new Top(), "~Top|Top/i:InstantiatesHasVec/i1:HasVec_2>x[0].x".rt, "blah")
     }
   }
-  describe("Targets on definition have correct circuit name"){}
-  describe("Don't error on naming instanceclone"){}
   describe("Select api's handle instanceClone properly"){}
 }

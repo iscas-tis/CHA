@@ -14,6 +14,15 @@ object Examples {
     out := innerWire
   }
   @instantiable
+  class AddOneWithAnnotation extends MultiIOModule {
+    @public val in  = IO(Input(UInt(32.W)))
+    @public val out = IO(Output(UInt(32.W)))
+    @public val innerWire = Wire(UInt(32.W))
+    mark(innerWire, "innerWire")
+    innerWire := in + 1.U
+    out := innerWire
+  }
+  @instantiable
   class AddTwo extends MultiIOModule {
     @public val in  = IO(Input(UInt(32.W)))
     @public val out = IO(Output(UInt(32.W)))
