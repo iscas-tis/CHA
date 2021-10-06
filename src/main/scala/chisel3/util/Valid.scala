@@ -116,8 +116,7 @@ object Pipe {
       val b = RegEnable(enqBits, enqValid)
       val out = apply(v, b, latency-1)(compileOptions)
 
-      TransitName.withSuffix("Pipe_valid")(out, v)
-      TransitName.withSuffix("Pipe_bits")(out, b)
+      out
     }
   }
 
