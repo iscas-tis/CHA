@@ -101,14 +101,14 @@ object TruthTable {
     tables: Seq[(TruthTable, Seq[Int])]
   ): TruthTable = {
     def reIndex(bitPat: BitPat, table: TruthTable, indexes: Seq[Int]): Seq[(Char, Int)] =
-      table.table.map(a => a._1.toString -> a._2).toMap.getOrElse(bitPat.toString, BitPat.dontCare(indexes.size)).rawString.zip(indexes)
+      table.table.map(a => a._1.toString -> a._2).collectFirst{ case (k, v) if k == bitPat.toString => v}.getOrElse(BitPat.dontCare(indexes.size)).rawString.zip(indexes)
     def bitPat(indexedChar: Seq[(Char, Int)]) = BitPat(s"b${indexedChar
       .sortBy(_._2)
       .map(_._1)
       .mkString}")
     TruthTable(
       tables
-        .flatMap(_._1.table.toMap.keys)
+        .flatMap(_._1.table.map(_._1))
         .map { key =>
           key -> bitPat(tables.flatMap { case (table, indexes) => reIndex(key, table, indexes) })
         },
