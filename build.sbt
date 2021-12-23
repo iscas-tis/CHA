@@ -156,9 +156,11 @@ lazy val macros = (project in file("macros")).
   settings(mimaPreviousArtifacts := Set())
 
 lazy val firrtlRef = ProjectRef(workspaceDirectory / "firrtl", "firrtl")
+lazy val chiseltestRef = ProjectRef(workspaceDirectory / "chisel-testers2", "chisel-testers2")
 
 lazy val core = (project in file("core")).
   sourceDependency(firrtlRef, defaultVersions("firrtl")).
+  sourceDependency(chiseltestRef, defaultVersions("chiseltest")).
   settings(commonSettings: _*).
   enablePlugins(BuildInfoPlugin).
   settings(

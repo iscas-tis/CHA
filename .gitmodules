@@ -1,0 +1,8 @@
+[submodule "firrtl"]
+	path = firrtl
+	url = git@github.com:log-when/firrtl.git
+	branch = extend_sva
+[submodule "chisel-testers2"]
+	path = chisel-testers2
+	url = git@github.com:log-when/chisel-testers2.git
+	branch = extend_sva
