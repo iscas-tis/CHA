@@ -4,16 +4,20 @@ import chisel3._
 import chiseltest.formal._
 
 class CounterProp(width: Int) extends Counter(width) {
-  when(past(io.en)) {
-    //assert(countReg === past((countReg + 1.U)(width - 1, 0),3))
+  
+  assert(TSequence(Seq(TimeOp(1,1),AtmProp(countReg(3)))))
+  //assert(TSequence(Seq(TimeOp(1,3),AtmProp(!countReg(0)))))
+  /*when(past(io.en)) {
+    //assert(countReg === past((countReg + 1.U)(width - 1, 0),1))
     //assert(TSequence(Seq(AtmProp(countReg(0)),TimeOp(2,2),Implication(),TimeOp(1,1),Implication(),TimeOp(3,3),AtmProp(countReg(3)))))
-    assert(TSequence(Seq(TimeOp(1,2),AtmProp(countReg(3)))))
+    
+    //verify(TSequence(Seq(TimeOp(1,2),AtmProp(countReg(3)))), Seq(BoundedCheck(3), BtormcEngineAnnotation))
     //assert(TSeq(a, ##1, b)) == 
     //assert(b & past(a, 2)) 3
     //assert(a & past(b,-2)) 1
     //0 1 2
     //assert(countReg === past((countReg + 1.U)(width - 1, 0),3))
-  }
+  }*/
 }
 
 object CounterFormal extends App {
