@@ -22,12 +22,15 @@ class Counter(width: Int) extends Module {
       {
         val svaanotation : Seq[Seq[TSeqElementAnno]] = sva map {
           case AtmProp(ap) => Seq(AtmPropAnno(ap.toTarget))
-          case TimeOp(lc,hc) => Seq(TimeOpAnno(lc,hc)) } 
+          case TimeOp(lc,hc) => Seq(TimeOpAnno(lc,hc)) 
+          case Implication() => Seq(ImplicationAnno())
+          } 
+
         new SVAAnno(svaanotation)
       }
     })
   }
-  makeSVAAnno(Seq(AtmProp(countReg(0)),TimeOp(1,2),AtmProp(testReg(0))))
+  makeSVAAnno(Seq(AtmProp(countReg(0)),TimeOp(1,2),AtmProp(testReg(0)), Implication(), AtmProp(countReg(1)),Implication(), AtmProp(countReg(0))))
   io.dout := countReg
   // assert(countReg === past((countReg + 1.U)(width - 1, 0),1))
 }
