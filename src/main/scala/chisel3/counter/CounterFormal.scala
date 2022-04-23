@@ -15,7 +15,7 @@ import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, 
 class CounterProp1(width: Int) extends Module {
   //val tempp = mem.read(2.U(32.W))
   val comp1 = Module(new Counter(width))
-  val comp2 = Module(new Counter(width))
+  //val comp2 = Module(new Counter(width))
   //val comp3 = Module(new Counter(width))
   
   //assert(countReg === past((countReg + 1.U)(width - 1, 0),1))
