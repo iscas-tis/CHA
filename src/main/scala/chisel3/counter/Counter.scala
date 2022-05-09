@@ -35,7 +35,7 @@ class Counter(width: Int) extends Module {
           case FinallOp() => Seq(FinallAnno())
           case GlobalOp() => Seq(GlobalAnno())
           case NextOp() => Seq(NextAnno())
-          case RepetOp() => Seq(RepetAnno())
+          //case RepetOp() => Seq(RepetAnno())
           } 
 
         new SVAAnno(svaanotation)
@@ -44,9 +44,9 @@ class Counter(width: Int) extends Module {
   }
   //countReg(0)
   //implicit def uint2Atm(signal:UInt): AtmProp = new AtmProp(signal)    
-  printlnTSeq(F (###(2, 3) ###(2, 3) ap(countReg(0)) ###(2, 3) ap(countReg(0)) ) |-> ap(countReg(1)) |-> ap(countReg(0)) )
+  //printlnTSeq(F (###(2, 3) ###(2, 3) ap(countReg(0)) ###(2, 3) ap(countReg(0)) ) |-> ap(countReg(1)) |-> ap(countReg(0)) )
   //makeSVAAnno(Seq(FinalOp(), Leftbraket(), Leftbraket(), NextOp(), GlobalOp(), AtmProp(countReg(0)), ))
-  makeSVAAnno(Seq(NotOp(), Leftbraket(), AtmProp(countReg(0)), RepetOp(), Implication(), FinallOp(), AtmProp(countReg(0)), Rightbraket()))
+  makeSVAAnno(Seq(FinallOp(),AtmProp(countReg(width-1))))
   io.dout := countReg
   assert(countReg === past((countReg + 1.U)(width - 1, 0),1))
 }
