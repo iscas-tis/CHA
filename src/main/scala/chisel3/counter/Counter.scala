@@ -1,14 +1,9 @@
 package counter
 
 import chisel3._
+import chiseltest._
 import chiseltest.formal._
-import chiseltest.formal.TTSeq._
-import scala.language.implicitConversions
-import chisel3.experimental.{ChiselAnnotation,annotate}
-import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target}
-
-import scala.language.experimental.macros
-import scala.reflect.macros.blackbox.Context
+import chiseltest.formal.svaSeq._
 
 class Counter(width: Int) extends Module {
   val io = IO(new Bundle {
@@ -16,52 +11,42 @@ class Counter(width: Int) extends Module {
     val dout = Output(UInt(width.W))
   })
   val countReg = RegInit(0.U(width.W))
-  val testReg = RegInit(0.U(width.W))
-  val vis_countReg = countReg(0)
-  val vis_testReg = testReg(2)
+  //val testReg = RegInit(0.U(width.W))
+  //val vis_countReg = countReg(0)
+  //val vis_testReg = testReg(2)
   countReg := countReg + 1.U
-  def makeSVAAnno(sva: Seq[TSeqElement]) = {
-    annotate(new ChiselAnnotation {
-      // Conversion to FIRRTL Annotation 
-      override def toFirrtl: Annotation = 
-      {
-        val svaanotation : Seq[Seq[TSeqElementAnno]] = sva map {
-          case AtmProp(ap) => Seq(AtmPropAnno(ap.toTarget))
-          case TimeOp(lc,hc) => Seq(TimeOpAnno(lc,hc)) 
-          case Implication() => Seq(ImplicationAnno())
-          case NotOp() => Seq(NotAnno())
-          case Leftbraket() => Seq(LeftbraketAnno())
-          case Rightbraket() => Seq(RightbraketAnno())
-          case FinallOp() => Seq(FinallAnno())
-          case GlobalOp() => Seq(GlobalAnno())
-          case NextOp() => Seq(NextAnno())
-          //case RepetOp() => Seq(RepetAnno())
-          } 
-
-        new SVAAnno(svaanotation)
-      }
-    })
-  }
-  //countReg(0)
-  //implicit def uint2Atm(signal:UInt): AtmProp = new AtmProp(signal)    
-  //printlnTSeq(F (###(2, 3) ###(2, 3) ap(countReg(0)) ###(2, 3) ap(countReg(0)) ) |-> ap(countReg(1)) |-> ap(countReg(0)) )
-  //makeSVAAnno(Seq(FinalOp(), Leftbraket(), Leftbraket(), NextOp(), GlobalOp(), AtmProp(countReg(0)), ))
-  makeSVAAnno(Seq(FinallOp(),AtmProp(countReg(width-1))))
+  
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) )
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) )
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) *(2,3))
+  // svaSeqAnno.makeSVAAnno(this.reset,G ap(countReg(0)) ###(1,-1) *(2,3))
+  // svaSeqAnno.makeSVAAnno(this.reset,G ap(countReg(0)) ###(1,-1) *(2,3) U X ap(countReg(0)) ###(1,-1) |-> F ap(countReg(2)))
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) |-> F ap(countReg(2)))
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) U ap(countReg(1)) U ap(countReg(0)) )
+  // assume(reset==false)
+  svaSeqAnno.makeSVAAnno(this.reset, |- ap(countReg(0)) -|)
+  // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) -| -|)
+  // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| ###(2,3) ap(countReg(1)))
+  // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| ###(2,3) ap(countReg(1)) U X ap(countReg(2)) *(4,5) |-> G ap(countReg(2)))
+  // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| U ###(2,3) ap(countReg(1)))
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0) & !countReg(2)) |-> ###(1,4) ap(countReg(2) ) )
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)))
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)) |-> G X ap(!countReg(0)))
+  // svaSeqAnno.makeSVAAnno(this.reset, |- ap(!countReg(0)) ###(1,-1) ap(countReg(1)) ###(2,3) *(1,-1) |->  G X ###(1,-1) ap(countReg(1)) -|)
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)) ###(2,3) *(1,-1) |-> |- G X ###(1,-1) ap(countReg(1)) -|)
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) |- ap(countReg(1)) ###(2,3) -| *(1,-1) |-> G X ap(!countReg(0)))
+  
+  // svaSeqAnno.makeSVAAnno(this.reset, F |- |- ###(2, 3) ap(countReg(0)) -| *(2,3) | ap(countReg(1)) U G ap(countReg(0)) -| )
+  
+  // //svaSeqAnno.makeSVAAnno(this.reset, |- F  ###(2, 3) ap(countReg(0)) *(2,3) -| | ap(countReg(1))  U G ap(countReg(0)) )
+  
+  // svaSeqAnno.makeSVAAnno(this.reset, G |- ###(2, 3) ###(2, 3) ap(countReg(0)) && G ap(countReg(0)) -|)
+  // svaSeqAnno.makeSVAAnno(this.reset, F |- |- ###(2, 3) ap(countReg(0)) -| *(2,3) | ap(countReg(1)) U G ap(countReg(0)) -| )
+  // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0))) 
+  // printlnTSeq(###(2, 3) ###(2, 3) ap(countReg(0)) ###(2, 3) ap(countReg(0)) |-> ap(countReg(1)) |-> G F ap(countReg(0)) )
+  // makeSVAAnno(Seq(FinalOp(), Leftbraket(), Leftbraket(), NextOp(), GlobalOp(), AtmProp(countReg(0))))
+  // svaSeqAnno.makeSVAAnno(this.reset,! ap(countReg(0)) |-> F ! G ap(countReg(0)))
+  // svaSeqAnno.makeSVAAnno(this.reset, |- ap(!countReg(0)) -|)
   io.dout := countReg
-  assert(countReg === past((countReg + 1.U)(width - 1, 0),1))
-}
-
-object Macros {
-
-  // write macros here
-  def getName(x: Any): String = macro impl
-
-  def impl(c: Context)(x: c.Tree): c.Tree = {
-    import c.universe._
-    val p = x match {
-      case Select(_, TermName(s)) => s
-      case _ => ""
-    }
-    q"$p"
-  }
+  // assert(countReg(0))
 }

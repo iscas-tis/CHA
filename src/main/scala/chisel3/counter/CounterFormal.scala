@@ -23,18 +23,18 @@ class CounterProp1(width: Int) extends Module {
   //cross-instance?
   //makeSVAAnno(Seq(AtmProp(comp1.vis_testReg),TimeOp(1,2),AtmProp(comp2.vis_countReg)))
   
-  def makeSVAAnno(sva: Seq[TSeqElement]) = {
-    annotate(new ChiselAnnotation {
-      // Conversion to FIRRTL Annotation 
-      override def toFirrtl: Annotation = 
-      {
-        val svaanotation : Seq[Seq[TSeqElementAnno]] = sva map {
-          case AtmProp(ap) => Seq(AtmPropAnno(ap.toTarget))
-          case TimeOp(lc,hc) => Seq(TimeOpAnno(lc,hc)) } 
-        new SVAAnno(svaanotation)
-      }
-    })
-  }
+  // def makeSVAAnno(sva: Seq[TSeqElement]) = {
+  //   annotate(new ChiselAnnotation {
+  //     // Conversion to FIRRTL Annotation 
+  //     override def toFirrtl: Annotation = 
+  //     {
+  //       val svaanotation : Seq[Seq[TSeqElementAnno]] = sva map {
+  //         case AtmProp(ap) => Seq(AtmPropAnno(ap.toTarget))
+  //         case TimeOp(lc,hc) => Seq(TimeOpAnno(lc,hc)) } 
+  //       new SVAAnno(svaanotation)
+  //     }
+  //   })
+  // }
 }
   /*def makeAnno(signal: UInt) = {
     annotate(new ChiselAnnotation {
