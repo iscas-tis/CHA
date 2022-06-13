@@ -4,8 +4,8 @@ enablePlugins(SiteScaladocPlugin)
 
 val defaultVersions = Map(
   "firrtl" -> "edu.berkeley.cs" %% "firrtl" % "1.6-SNAPSHOT",
-  "treadle" -> "edu.berkeley.cs" %% "treadle" % "1.6-SNAPSHOT",
-  "chiseltest" -> "edu.berkeley.cs" %% "chiseltest" % "0.6-SNAPSHOT"
+  "treadle" -> "edu.berkeley.cs" %% "treadle" % "1.5.3",
+  "chiseltest" -> "edu.berkeley.cs" %% "chiseltest" % "0.7-SNAPSHOT"
 )
 
 lazy val commonSettings = Seq(
@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
     Resolver.sonatypeRepo("releases")
   ),
   organization := "edu.berkeley.cs",
-  version := "3.6-SNAPSHOT",
+  version := "3.7-SNAPSHOT",
   autoAPIMappings := true,
   scalaVersion := "2.12.15",
   crossScalaVersions := Seq("2.13.6", "2.12.15"),
