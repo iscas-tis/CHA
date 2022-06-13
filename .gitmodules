@@ -1,8 +1,8 @@
 [submodule "firrtl"]
 	path = firrtl
 	url = https://github.com/log-when/firrtl.git
-	branch = origin/testSVA
+	branch = origin:testSVA
 [submodule "chiseltest"]
 	path = chiseltest
 	url = https://github.com/log-when/chiseltest.git
-	branch = origin/testSVA
+	branch = origin:testSVA
