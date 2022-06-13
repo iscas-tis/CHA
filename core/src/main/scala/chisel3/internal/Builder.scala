@@ -6,7 +6,7 @@ import scala.util.DynamicVariable
 import scala.collection.mutable.ArrayBuffer
 import chisel3._
 import chisel3.experimental._
-import chisel3.experimental.hierarchy.{Clone, Instance}
+import chisel3.experimental.hierarchy.core.{Clone, ImportDefinitionAnnotation, Instance}
 import chisel3.internal.firrtl._
 import chisel3.internal.naming._
 import _root_.firrtl.annotations.{CircuitName, ComponentName, IsMember, ModuleName, Named, ReferenceTarget}
@@ -35,7 +35,7 @@ private[chisel3] class Namespace(keywords: Set[String]) {
     // TODO what character set does FIRRTL truly support? using ANSI C for now
     def legalStart(c: Char) = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
     def legal(c:      Char) = legalStart(c) || (c >= '0' && c <= '9')
-    val res = s.filter(legal)
+    val res = if (s.forall(legal)) s else s.filter(legal)
     val headOk = (!res.isEmpty) && (leadingDigitOk || legalStart(res.head))
     if (headOk) res else s"_$res"
   }
@@ -45,12 +45,9 @@ private[chisel3] class Namespace(keywords: Set[String]) {
   // leadingDigitOk is for use in fields of Records
   def name(elem: String, leadingDigitOk: Boolean = false): String = {
     val sanitized = sanitize(elem, leadingDigitOk)
-    if (this contains sanitized) {
-      name(rename(sanitized))
-    } else {
-      names(sanitized) = 1
-      sanitized
-    }
+    val result = if (this.contains(sanitized)) rename(sanitized) else sanitized
+    names(result) = 1
+    result
   }
 }
 
@@ -90,7 +87,6 @@ trait InstanceId {
 }
 
 private[chisel3] trait HasId extends InstanceId {
-  private[chisel3] def _onModuleClose: Unit = {}
   private[chisel3] var _parent: Option[BaseModule] = Builder.currentModule
 
   // Set if the returned top-level module of a nested call to the Chisel Builder, see Definition.apply
@@ -108,17 +104,16 @@ private[chisel3] trait HasId extends InstanceId {
   // Contains the seed computed automatically by the compiler plugin
   private var auto_seed: Option[String] = None
 
-  // Prefix at time when this class is constructed
-  private val construction_prefix: Prefix = Builder.getPrefix
-
-  // Prefix when the latest [[suggestSeed]] or [[autoSeed]] is called
-  private var prefix_seed: Prefix = Nil
+  // Prefix for use in naming
+  // - Defaults to prefix at time when object is created
+  // - Overridden when [[suggestSeed]] or [[autoSeed]] is called
+  private var naming_prefix: Prefix = Builder.getPrefix
 
   // Post-seed hooks called to carry the suggested seeds to other candidates as needed
-  private val suggest_postseed_hooks = scala.collection.mutable.ListBuffer.empty[String => Unit]
+  private var suggest_postseed_hooks: List[String => Unit] = Nil
 
   // Post-seed hooks called to carry the auto seeds to other candidates as needed
-  private val auto_postseed_hooks = scala.collection.mutable.ListBuffer.empty[String => Unit]
+  private var auto_postseed_hooks: List[String => Unit] = Nil
 
   /** Takes the last seed suggested. Multiple calls to this function will take the last given seed, unless
     * this HasId is a module port (see overridden method in Data.scala).
@@ -136,9 +131,20 @@ private[chisel3] trait HasId extends InstanceId {
   // Bypass the overridden behavior of autoSeed in [[Data]], apply autoSeed even to ports
   private[chisel3] def forceAutoSeed(seed: String): this.type = {
     auto_seed = Some(seed)
-    for (hook <- auto_postseed_hooks) { hook(seed) }
-    prefix_seed = Builder.getPrefix
+    for (hook <- auto_postseed_hooks.reverse) { hook(seed) }
+    naming_prefix = Builder.getPrefix
     this
+  }
+
+  // Private internal version of suggestName that tells you if the name changed
+  // Returns Some(old name, old prefix) if name changed, None otherwise
+  private[chisel3] def _suggestNameCheck(seed: => String): Option[(String, Prefix)] = {
+    val oldSeed = this.seedOpt
+    val oldPrefix = this.naming_prefix
+    suggestName(seed)
+    if (oldSeed.nonEmpty && (oldSeed != this.seedOpt || oldPrefix != this.naming_prefix)) {
+      Some(oldSeed.get -> oldPrefix)
+    } else None
   }
 
   /** Takes the first seed suggested. Multiple calls to this function will be ignored.
@@ -153,8 +159,8 @@ private[chisel3] trait HasId extends InstanceId {
     */
   def suggestName(seed: => String): this.type = {
     if (suggested_seed.isEmpty) suggested_seed = Some(seed)
-    prefix_seed = Builder.getPrefix
-    for (hook <- suggest_postseed_hooks) { hook(seed) }
+    naming_prefix = Builder.getPrefix
+    for (hook <- suggest_postseed_hooks.reverse) { hook(seed) }
     this
   }
 
@@ -175,26 +181,13 @@ private[chisel3] trait HasId extends InstanceId {
     * @return the name, if it can be computed
     */
   private[chisel3] def _computeName(defaultPrefix: Option[String], defaultSeed: Option[String]): Option[String] = {
-
-    /** Computes a name of this signal, given the seed and prefix
-      * @param seed
-      * @param prefix
-      * @return
-      */
-    def buildName(seed: String, prefix: Prefix): String = {
-      val builder = new StringBuilder()
-      prefix.foreach(builder ++= _ + "_")
-      builder ++= seed
-      builder.toString
-    }
-
     if (hasSeed) {
-      Some(buildName(seedOpt.get, prefix_seed.reverse))
+      Some(buildName(seedOpt.get, naming_prefix.reverse))
     } else {
       defaultSeed.map { default =>
         defaultPrefix match {
-          case Some(p) => buildName(default, p :: construction_prefix.reverse)
-          case None    => buildName(default, construction_prefix.reverse)
+          case Some(p) => buildName(default, p :: naming_prefix.reverse)
+          case None    => buildName(default, naming_prefix.reverse)
         }
       }
     }
@@ -211,8 +204,8 @@ private[chisel3] trait HasId extends InstanceId {
 
   private[chisel3] def hasAutoSeed: Boolean = auto_seed.isDefined
 
-  private[chisel3] def addSuggestPostnameHook(hook: String => Unit): Unit = suggest_postseed_hooks += hook
-  private[chisel3] def addAutoPostnameHook(hook:    String => Unit): Unit = auto_postseed_hooks += hook
+  private[chisel3] def addSuggestPostnameHook(hook: String => Unit): Unit = suggest_postseed_hooks ::= hook
+  private[chisel3] def addAutoPostnameHook(hook:    String => Unit): Unit = auto_postseed_hooks ::= hook
 
   // Uses a namespace to convert suggestion into a true name
   // Will not do any naming if the reference already assigned.
@@ -222,6 +215,8 @@ private[chisel3] trait HasId extends InstanceId {
       val candidate_name = _computeName(prefix, Some(default)).get
       val available_name = namespace.name(candidate_name)
       setRef(Ref(available_name))
+      // Clear naming prefix to free memory
+      naming_prefix = Nil
     }
 
   private var _ref: Option[Arg] = None
@@ -239,7 +234,8 @@ private[chisel3] trait HasId extends InstanceId {
 
   private def refName(c: Component): String = _ref match {
     case Some(arg) => arg.fullName(c)
-    case None      => _computeName(None, None).get
+    case None =>
+      throwException("You cannot access the .instanceName or .toTarget of non-hardware Data")
   }
 
   // Helper for reifying views if they map to a single Target
@@ -288,26 +284,6 @@ private[chisel3] trait HasId extends InstanceId {
       }
     case Some(ViewParent) => reifyParent.circuitName
     case Some(p)          => p.circuitName
-  }
-
-  private[chisel3] def getPublicFields(rootClass: Class[_]): Seq[java.lang.reflect.Method] = {
-    // Suggest names to nodes using runtime reflection
-    def getValNames(c: Class[_]): Set[String] = {
-      if (c == rootClass) {
-        Set()
-      } else {
-        getValNames(c.getSuperclass) ++ c.getDeclaredFields.map(_.getName)
-      }
-    }
-    val valNames = getValNames(this.getClass)
-    def isPublicVal(m: java.lang.reflect.Method) = {
-      val noParameters = m.getParameterTypes.isEmpty
-      val aVal = valNames.contains(m.getName)
-      val notAssignable = !m.getDeclaringClass.isAssignableFrom(rootClass)
-      val notWeirdVal = !m.getName.contains('$')
-      noParameters && aVal && notAssignable && notWeirdVal
-    }
-    this.getClass.getMethods.filter(isPublicVal).sortWith(_.getName < _.getName)
   }
 }
 
@@ -362,8 +338,27 @@ private[chisel3] class ChiselContext() {
   val viewNamespace = Namespace.empty
 }
 
-private[chisel3] class DynamicContext(val annotationSeq: AnnotationSeq, val throwOnFirstError: Boolean) {
+private[chisel3] class DynamicContext(
+  val annotationSeq:     AnnotationSeq,
+  val throwOnFirstError: Boolean) {
+  val importDefinitionAnnos = annotationSeq.collect { case a: ImportDefinitionAnnotation[_] => a }
+
+  // Ensure there are no repeated names for imported Definitions
+  val importDefinitionNames = importDefinitionAnnos.map { a => a.definition.proto.name }
+  if (importDefinitionNames.distinct.length < importDefinitionNames.length) {
+    val duplicates = importDefinitionNames.diff(importDefinitionNames.distinct).mkString(", ")
+    throwException(s"Expected distinct imported Definition names but found duplicates for: $duplicates")
+  }
+
   val globalNamespace = Namespace.empty
+
+  // Ensure imported Definitions emit as ExtModules with the correct name so
+  // that instantiations will also use the correct name and prevent any name
+  // conflicts with Modules/Definitions in this elaboration
+  importDefinitionNames.foreach { importDefName =>
+    globalNamespace.name(importDefName)
+  }
+
   val components = ArrayBuffer[Component]()
   val annotations = ArrayBuffer[ChiselAnnotation]()
   var currentModule: Option[BaseModule] = None
@@ -640,7 +635,7 @@ private[chisel3] object Builder extends LazyLogging {
   def nameRecursively(prefix: String, nameMe: Any, namer: (HasId, String) => Unit): Unit = nameMe match {
     case (id: Instance[_]) =>
       id.underlying match {
-        case Clone(m: internal.BaseModule.ModuleClone[_]) => namer(m.getPorts, prefix)
+        case Clone(m: experimental.hierarchy.ModuleClone[_]) => namer(m.getPorts, prefix)
         case _ =>
       }
     case (id: HasId) => namer(id, prefix)
@@ -661,8 +656,9 @@ private[chisel3] object Builder extends LazyLogging {
       throwException(m)
     }
   }
-  def warning(m:    => String): Unit = if (dynamicContextVar.value.isDefined) errors.warning(m)
-  def deprecated(m: => String, location: Option[String] = None): Unit =
+  def warning(m:      => String): Unit = if (dynamicContextVar.value.isDefined) errors.warning(m)
+  def warningNoLoc(m: => String): Unit = if (dynamicContextVar.value.isDefined) errors.warningNoLoc(m)
+  def deprecated(m:   => String, location: Option[String] = None): Unit =
     if (dynamicContextVar.value.isDefined) errors.deprecated(m, location)
 
   /** Record an exception as an error, and throw it.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package chisel3.experimental.hierarchy
+package chisel3.experimental.hierarchy.core
 
 import scala.language.experimental.macros
 import chisel3._
@@ -9,8 +9,8 @@ import scala.collection.mutable.HashMap
 import chisel3.internal.{Builder, DynamicContext}
 import chisel3.internal.sourceinfo.{DefinitionTransform, DefinitionWrapTransform, SourceInfo}
 import chisel3.experimental.BaseModule
-import chisel3.internal.BaseModule.IsClone
-import firrtl.annotations.{IsModule, ModuleTarget}
+import chisel3.experimental.hierarchy.Definition
+import firrtl.annotations.{IsModule, ModuleTarget, NoTargetAnnotation}
 
 /** User-facing Definition type.
   * Represents a definition of an object of type [[A]] which are marked as @instantiable
@@ -50,7 +50,7 @@ final case class Definition[+A] private[chisel3] (private[chisel3] underlying: U
   /** @return the context of any Data's return from inside the instance */
   private[chisel3] def getInnerDataContext: Option[BaseModule] = proto match {
     case value: BaseModule =>
-      val newChild = Module.do_pseudo_apply(new internal.BaseModule.DefinitionClone(value))(
+      val newChild = Module.do_pseudo_apply(new experimental.hierarchy.DefinitionClone(value))(
         chisel3.internal.sourceinfo.UnlocatableSourceInfo,
         chisel3.ExplicitCompileOptions.Strict
       )
@@ -100,7 +100,10 @@ object Definition extends SourceInfoDoc {
     implicit sourceInfo: SourceInfo,
     compileOptions:      CompileOptions
   ): Definition[T] = {
-    val dynamicContext = new DynamicContext(Nil, Builder.captureContext().throwOnFirstError)
+    val dynamicContext = {
+      val context = Builder.captureContext()
+      new DynamicContext(Nil, context.throwOnFirstError)
+    }
     Builder.globalNamespace.copyTo(dynamicContext.globalNamespace)
     dynamicContext.inDefinition = true
     val (ir, module) = Builder.build(Module(proto), dynamicContext, false)
@@ -112,3 +115,9 @@ object Definition extends SourceInfoDoc {
   }
 
 }
+
+/** Stores a [[Definition]] that is imported so that its Instances can be
+  * compiled separately.
+  */
+case class ImportDefinitionAnnotation[T <: BaseModule with IsInstantiable](definition: Definition[T])
+    extends NoTargetAnnotation

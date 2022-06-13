@@ -332,6 +332,36 @@ class DataViewSpec extends ChiselFlatSpec {
     chirrtl should include("dataOut <= vec[addr]")
   }
 
+  it should "support dynamic indexing for Vecs that correspond 1:1 in a view" in {
+    class MyBundle extends Bundle {
+      val foo = Vec(4, UInt(8.W))
+      val bar = UInt(2.W)
+    }
+    implicit val myView = DataView[(Vec[UInt], UInt), MyBundle](
+      _ => new MyBundle,
+      _._1 -> _.foo,
+      _._2 -> _.bar
+    )
+    class MyModule extends Module {
+      val dataIn = IO(Input(UInt(8.W)))
+      val addr = IO(Input(UInt(2.W)))
+      val dataOut = IO(Output(UInt(8.W)))
+
+      val vec = RegInit(0.U.asTypeOf(Vec(4, UInt(8.W))))
+      val addrReg = Reg(UInt(2.W))
+      val view = (vec, addrReg).viewAs[MyBundle]
+      // Dynamic indexing is more of a "generator" in Chisel3 than an individual node
+      // This style is not recommended, this is just testing the behavior
+      val selected = view.foo(view.bar)
+      view.bar := addr
+      selected := dataIn
+      dataOut := selected
+    }
+    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    chirrtl should include("vec[addrReg] <= dataIn")
+    chirrtl should include("dataOut <= vec[addrReg]")
+  }
+
   it should "error if you try to dynamically index a Vec view that does not correspond to a Vec target" in {
     class MyModule extends Module {
       val inA, inB = IO(Input(UInt(8.W)))
@@ -447,6 +477,25 @@ class DataViewSpec extends ChiselFlatSpec {
     val expected =
       """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <unknown>""".r
     (err.getMessage should fullyMatch).regex(expected)
+  }
+
+  it should "support invalidation" in {
+    class MyModule extends Module {
+      val a, b, c, d, e, f = IO(Output(UInt(8.W)))
+      val foo = (a, b).viewAs
+      val bar = (c, d).viewAs
+      val fizz = (e, f).viewAs
+      foo := DontCare
+      bar <> DontCare
+      fizz._1 := DontCare
+      fizz._2 <> DontCare
+    }
+
+    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val expected = ('a' to 'f').map(c => s"$c is invalid")
+    for (line <- expected) {
+      chirrtl should include(line)
+    }
   }
 
   behavior.of("PartialDataView")
