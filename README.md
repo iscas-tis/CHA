@@ -67,44 +67,97 @@ sbt compile
 
 ## Usage
 
-You can write your own assertions using `makeSVAAnno` function in  [svaSeq](chiseltest/src/main/scala/chiseltest/formal/svaAnno.scala). Please add the necessary imports as below.
+1. Publish local Chiseltest, FIRRTL and Chisel
 
-```scala
-import chisel3._
-import chiseltest._
-import chiseltest.formal.svaSeq._
+For local DUT Chisel project, you must publish local version of Chiseltest, FIRRTL and Chisel first.
+
+```
+# publish local version of Chiseltest, firrtl, Chisel
+
+cd chiseltest
+sbt
+    %in sbt 
+    publishLocal
+    exit
+cd ../firrtl
+sbt
+    publishLocal
+    exit
+cd ../
+sbt
+    publishLocal
+    exit
 ```
 
-Assuming a Chisel project `MyModule` defined in `src/main/scala/MyModule.scala`:
+2. Modify dependency of local DUT Chisel project
 
-```scala
-class MyModule extend Module {
-    val io = IO(new Bundle {
-        val in = Input(UInt(16.W))
-        val out = Output(UInt(16.W))
-    })
-
-    // module class body here
-  
-    // assertion
-    // svaSeqAnno.makeSVAAnno(******)
-}
+```
+update libraryDependencies in build.sbt as
+"edu.berkeley.cs" %% "chisel3" % "3.7-SNAPSHOT",
+"edu.berkeley.cs" %% "chiseltest" % "0.7-SNAPSHOT" % "test",
+"edu.berkeley.cs" %% "firrtl" % "1.6-SNAPSHOT",
 ```
 
-Write a test class in `src/test/scala/` , for example:
+3. Add necessary lib
 
-```scala
-class Mytest extends AnyFlatSpec with ChiselScalatestTester with Formal {
-  behavior of "MyModule"
-  // test class body here
-}
-```
+   You need to add `javabdd-1.0b2.jar` and  `jhoafparser-1.1.1.jar` in lib.
 
-After install [gtkwave](https://sourceforge.net/projects/gtkwave/) , you can find VCD waveform witness in `test_run_dir` .
+4. Install [gtkwave](https://sourceforge.net/projects/gtkwave/)
 
-![GCDWitness](https://tva1.sinaimg.cn/large/e6c9d24ely1h3iaa6kca2j217o042di0.jpg)
+   After install gtkwave, you could find VCD waveform witness in `test_run_dir` .
 
- 
+5. Run a test
+
+   ```
+   >sbt
+   testOnly Yourtestclassname
+   ```
+
+   
+
+## An example
+
+Here is an example test of GCD. For a 4-bit GCD project, we can verify that the program must end within 16 cycles. 
+
+1. DUT project:
+
+   ```scala
+   class DecoupledGcd(val bitWidth: Int) extends Module {
+     // module body
+   }
+   ```
+
+2. Add the assertion:
+
+   ```scala
+   class DecoupledGcdProp1(width: Int) extends DecoupledGcd(width: Int){
+     svaSeqAnno.makeSVAAnno(this.reset, ap(busy) |->  ###(1,15) ap(!busy))
+   }
+   ```
+
+3. Create a test class:
+
+   ```scala
+   class DecoupledGcdSpec extends AnyFlatSpec with ChiselScalatestTester with Formal {
+     behavior of "DecoupledGcd"
+     it should "pass" in {
+       verify(new DecoupledGcdProp1(4), Seq(BoundedCheck(150), BtormcEngineAnnotation))
+     }
+   }
+   ```
+
+4. Run a test
+
+   ```
+   >sbt
+   testOnly DecoupledGcdSpec
+   ```
+
+5. When test case completed, you can find test results in `test_run_dir`.
+
+   ![image-20220704102342059](https://tva1.sinaimg.cn/large/e6c9d24ely1h3uollfw8wj217o0420uw.jpg)
+
+   
 
 ## The CHA Format
 
@@ -112,6 +165,17 @@ After install [gtkwave](https://sourceforge.net/projects/gtkwave/) , you can fin
 
 ```
 s := ap(u) | s ###0(s) | s ###1(s)| s*(0)| s*(1.-1) | |-s-|
+ap ::= boolean sequence
+###0 ::= sequence fusion
+###1 ::= sequence concatenation
+*(0) ::= zero repetition
+*(1,-1) ::= intervals
+```
+
+Forr example:
+
+```
+ap(busy) |->  ###(1,15) ap(!busy)
 ```
 
 #### Property Format
@@ -120,10 +184,16 @@ s := ap(u) | s ###0(s) | s ###1(s)| s*(0)| s*(1.-1) | |-s-|
 p := s | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p | |-p-|
 ```
 
-#### Sequence Operators                                                                                                                                                 
-| Operator | Description | Signature  |
-| :------: | :---------: | :--------: |
-|   ###    | time delay  | s ###(1) s |
-|   \|->   | Implication |  s \|-> p  |
-|   *(n)   |   repeat    |   s *(1)   |
+#### Sequence Operators                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 
+| Spec. | boolean sequence | sequence fusion | sequence concatenation | sequence disjunction | zero repetition | intervals |
+| :---: | :--------------: | :-------------: | :--------------------: | :------------------: | :-------------: | :-------: |
+|  SVA  |        u         |       ##0       |          ##1           |          or          |      [*0]       |  [*1:$]   |
+|  CHA  |      ap(u)       |     ###(0)      |         ###(1)         |          \|          |      *(0)       |  *(1:$)   |
+
+#### Property Operators
+
+| Name. | suffix implication | property negation | property conjunction | property disjunction | nexttime property | always property | s_eventually property | until property |
+| :---: | :----------------: | :---------------: | :------------------: | :------------------: | :---------------: | :-------------: | :-------------------: | :------------: |
+|  SVA  |        \|->        |        not        |         and          |          or          |     nexttime      |     always      |     s_eventually      |     until      |
+|  CHA  |        \|->        |         !         |          &&          |         \|\|         |         X         |        G        |           F           |       U        |
