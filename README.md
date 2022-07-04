@@ -157,9 +157,9 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
 
    ![image-20220704102342059](https://tva1.sinaimg.cn/large/e6c9d24ely1h3uollfw8wj217o0420uw.jpg)
 
-## Other example
+## Another example
  
-  The Wishbone Interface test introduced in our paper can be found in https://github.com/log-when/caravan.git 
+  The verification of Wishbone Interface shown in our paper can be found in https://github.com/log-when/caravan.git 
 
 ## The CHA Format
 
