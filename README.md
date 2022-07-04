@@ -172,7 +172,7 @@ ap ::= boolean sequence
 *(1,-1) ::= intervals
 ```
 
-Forr example:
+For example:
 
 ```
 ap(busy) |->  ###(1,15) ap(!busy)
