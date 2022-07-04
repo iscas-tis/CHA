@@ -1,6 +1,6 @@
 # CHA: a verification tool supports SVA-like assertions in Chisel
 
-We present CHA, an assertion language and verification tool for Chisel programs built on top of ChiselTest, where we extend the Chisel assertion language with SystemVerilog assertions (SVA)-like temporal operators. This enables formal verification of Chisel hardware designs against general temporal properties.
+CHA is an assertion language and verification tool for Chisel programs built on top of ChiselTest, where we extend the Chisel assertion language with SystemVerilog assertions (SVA)-like temporal operators. This enables formal verification of Chisel hardware designs against general temporal properties.
 
 ## Download
 
@@ -51,7 +51,7 @@ You can visit [Spot installation](https://spot.lrde.epita.fr/install.html) for f
 
 ## Build
 
-The stable version is at `testSVA` branch, from the  root directory configure and build as follows:
+The stable version is at `testSVA` branch, from the root directory configure and build as follows:
 
 ```
 # Download
