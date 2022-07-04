@@ -97,11 +97,11 @@ update libraryDependencies in build.sbt as
 
 3. Add necessary lib
 
-   You need to add `javabdd-1.0b2.jar` and  `jhoafparser-1.1.1.jar` in lib.
+   You need to add [javabdd](http://javabdd.sourceforge.net/) and  [jhoafparser](https://automata.tools/hoa/jhoafparser/) as external dependency in lib folder.
 
 4. Install [gtkwave](https://sourceforge.net/projects/gtkwave/)
 
-   After install gtkwave, you could find VCD waveform witness in `test_run_dir` .
+   After installing gtkwave, you could view VCD waveform witness in `test_run_dir` .
 
 5. Run a test
 
