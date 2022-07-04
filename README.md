@@ -49,6 +49,11 @@ make install
 
 You can visit [Spot installation](https://spot.lrde.epita.fr/install.html) for further detail.
 
+4.[gtkwave](https://sourceforge.net/projects/gtkwave/) (optional)
+
+   gtkwave is used to view counterexample written in VCD format if the assertion is violated.
+   
+
 ## Download CHA, matched FIRRTL and ChiselTest
 
 The stable version is at `testSVA` branch, from the root directory configure and build as follows:
@@ -99,17 +104,14 @@ update libraryDependencies in build.sbt as
 
    You need to add [javabdd](http://javabdd.sourceforge.net/) and  [jhoafparser](https://automata.tools/hoa/jhoafparser/) as external dependency in lib folder.
 
-4. Install [gtkwave](https://sourceforge.net/projects/gtkwave/)
-
-   After installing gtkwave, you could view VCD waveform witness in `test_run_dir` .
-
-5. Run a test
+4. Run a test
 
    ```
    >sbt
    testOnly Yourtestclassname
    ```
-
+5. Result
+ CHA will show the property passes or provide a counterexample. If you have installed gtkwave, you could view VCD waveform witness in `test_run_dir` .
    
 
 ## An example
