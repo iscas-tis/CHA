@@ -49,20 +49,17 @@ make install
 
 You can visit [Spot installation](https://spot.lrde.epita.fr/install.html) for further detail.
 
-## Build
+## Download CHA, matched FIRRTL and ChiselTest
 
 The stable version is at `testSVA` branch, from the root directory configure and build as follows:
 
 ```
 # Download
 git clone https://github.com/iscas-tis/CHA.git
-
-# Build
 cd chisel3
 git checkout testSVA
 git submodule init
 git submodule update --remote
-sbt compile
 ```
 
 ## Usage
