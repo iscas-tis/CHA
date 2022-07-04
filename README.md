@@ -114,6 +114,7 @@ update libraryDependencies in build.sbt as
  CHA will show the property passes or provide a counterexample. If you have installed gtkwave, you could view VCD waveform witness in `test_run_dir` .
    
 
+
 ## An example
 
 Here is an example test of GCD. For a 4-bit GCD project, we can verify that the program must end within 16 cycles. 
@@ -156,7 +157,9 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
 
    ![image-20220704102342059](https://tva1.sinaimg.cn/large/e6c9d24ely1h3uollfw8wj217o0420uw.jpg)
 
-   
+## Other example
+ 
+  The Wishbone Interface test introduced in our paper can be found in https://github.com/log-when/caravan.git 
 
 ## The CHA Format
 
