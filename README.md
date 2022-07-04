@@ -119,7 +119,7 @@ update libraryDependencies in build.sbt as
 
 Here is an example test of GCD. For a 4-bit GCD project, we can verify that the program must end within 16 cycles. 
 
-1. DUT project:
+1. DUT project: (Design file is in (https://github.com/log-when/GCD/blob/master/src/main/scala/GCD/GCD.scala))
 
    ```scala
    class DecoupledGcd(val bitWidth: Int) extends Module {
