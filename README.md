@@ -160,13 +160,14 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
 
 ## The CHA Format
 
-#### Sequence Format
+#### Sequence Format 
+Note that "|-" and "-|" denotes the left parenthesis and right parenthesis.
 
 ```
 s := ap(u) | s ###0(s) | s ###1(s)| s*(0)| s*(1.-1) | |-s-|
 ap ::= boolean sequence
-###0 ::= sequence fusion
-###1 ::= sequence concatenation
+###(0) ::= sequence fusion
+###(1) ::= sequence concatenation
 *(0) ::= zero repetition
 *(1,-1) ::= intervals
 ```
