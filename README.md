@@ -49,7 +49,7 @@ make install
 
 You can visit [Spot installation](https://spot.lrde.epita.fr/install.html) for further detail.
 
-4.[gtkwave](https://sourceforge.net/projects/gtkwave/) (optional)
+4.[Gtkwave](https://sourceforge.net/projects/gtkwave/) (optional)
 
    gtkwave is used to view counterexample written in VCD format if the assertion is violated.
    
