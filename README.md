@@ -115,7 +115,7 @@ update libraryDependencies in build.sbt as
    
 
 
-## An example
+## GCD example
 
 Here is an example test of GCD. For a 4-bit GCD project, we can verify that the program must end within 16 cycles. 
 
@@ -157,7 +157,7 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
 
    ![image-20220704102342059](https://tva1.sinaimg.cn/large/e6c9d24ely1h3uollfw8wj217o0420uw.jpg)
 
-## Another example
+## Wishbone Interface example
  
   The verification of Wishbone Interface shown in our paper can be found in https://github.com/log-when/caravan.git 
 
