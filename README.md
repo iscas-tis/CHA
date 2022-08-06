@@ -201,4 +201,5 @@ p := s | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p | |-p-|
 |  SVA  |        \|->        |        not        |         and          |          or          |     nexttime      |     always      |     s_eventually      |     until      |
 |  CHA  |        \|->        |         !         |          &&          |         \|\|         |         X         |        G        |           F           |       U        |
 
-### [Syntax and Semantics of Sequence and Property Formulas] (https://github.com/iscas-tis/CHA/blob/testSVA/Syntax%20and%20Semantics%20of%20Sequence%20and%20Property%20Formulas.pdf)
+### Syntax and Semantics of Sequence and Property Formulas 
+Details about syntax and semantics of our formulas is avaiable in [Syntax and Semantics of Sequence and Property Formulas.pdf](https://github.com/iscas-tis/CHA/blob/testSVA/Syntax%20and%20Semantics%20of%20Sequence%20and%20Property%20Formulas.pdf)
