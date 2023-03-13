@@ -2,14 +2,14 @@
 
 package chiselTests.experimental
 
-import chiselTests.ChiselFlatSpec
 import chisel3._
-import chisel3.experimental.dataview._
 import chisel3.experimental.conversions._
-import chisel3.experimental.DataMirror.internal.chiselTypeClone
-import chisel3.experimental.HWTuple2
-import chisel3.stage.ChiselStage
+import chisel3.experimental.dataview._
+import chisel3.experimental.{Analog, HWTuple2}
+import chisel3.reflect.DataMirror.internal.chiselTypeClone
 import chisel3.util.{Decoupled, DecoupledIO}
+import chiselTests.ChiselFlatSpec
+import circt.stage.ChiselStage
 
 object SimpleBundleDataView {
   class BundleA(val w: Int) extends Bundle {
@@ -63,7 +63,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB(8)))
       out := in.viewAs[BundleB]
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("out.bar <= in.foo")
   }
 
@@ -74,7 +74,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB(8)))
       out.viewAs[BundleA] := in
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("out.bar <= in.foo")
   }
 
@@ -86,9 +86,19 @@ class DataViewSpec extends ChiselFlatSpec {
       foo := in.viewAs[UInt]
       bar.viewAs[UInt] := in
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("foo <= in")
     chirrtl should include("bar <= in")
+  }
+
+  it should "handle viewing Analogs as Analogs" in {
+    class MyModule extends Module {
+      val foo = IO(Analog(8.W))
+      val bar = IO(Analog(8.W))
+      foo <> bar.viewAs[Analog]
+    }
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
+    chirrtl should include("attach (foo, bar)")
   }
 
   it should "handle viewing Bundles as their same concrete type" in {
@@ -102,7 +112,7 @@ class DataViewSpec extends ChiselFlatSpec {
       fizz := in.viewAs[MyBundle]
       buzz.viewAs[MyBundle] := in
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("fizz <= in")
     chirrtl should include("buzz <= in")
   }
@@ -115,7 +125,7 @@ class DataViewSpec extends ChiselFlatSpec {
       fizz := in.viewAs[Vec[UInt]]
       buzz.viewAs[Vec[UInt]] := in
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("fizz <= in")
     chirrtl should include("buzz <= in")
   }
@@ -129,7 +139,7 @@ class DataViewSpec extends ChiselFlatSpec {
       out := in.viewAs[Vec[UInt]]
       out2.viewAs[MyBundle] := in
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("out[0] <= in.bar")
     chirrtl should include("out[1] <= in.foo")
     chirrtl should include("out2[0] <= in.bar")
@@ -145,7 +155,7 @@ class DataViewSpec extends ChiselFlatSpec {
       deq <> enq.viewAs[FlatDecoupled]
       deq2.viewAs[DecoupledIO[FizzBuzz]] <> enq
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("deq.valid <= enq.valid")
     chirrtl should include("enq.ready <= deq.ready")
     chirrtl should include("deq.fizz <= enq.bits.fizz")
@@ -172,9 +182,183 @@ class DataViewSpec extends ChiselFlatSpec {
       val fooOut = IO(Output(new Foo))
       fooOut := barIn.viewAsSupertype(new Foo)
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("barOut.foo <= fooIn.foo")
     chirrtl should include("fooOut.foo <= barIn.foo")
+  }
+
+  it should "be easy to make a PartialDataView viewing a Bundle as a Parent Bundle type" in {
+    class Foo(x: Int) extends Bundle {
+      val foo = UInt(x.W)
+    }
+    class Bar(val x: Int) extends Foo(x) {
+      val bar = UInt(x.W)
+    }
+    implicit val view = PartialDataView.supertype[Bar, Foo](b => new Foo(b.x))
+    class MyModule extends Module {
+      val fooIn = IO(Input(new Foo(8)))
+      val barOut = IO(Output(new Bar(8)))
+      barOut.viewAs[Foo] := fooIn
+
+      val barIn = IO(Input(new Bar(8)))
+      val fooOut = IO(Output(new Foo(8)))
+      fooOut := barIn.viewAs[Foo]
+    }
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
+    chirrtl should include("barOut.foo <= fooIn.foo")
+    chirrtl should include("fooOut.foo <= barIn.foo")
+  }
+
+  it should "support viewing structural supertypes" in {
+    class A extends Bundle {
+      val x = UInt(3.W)
+      val y = UInt(3.W)
+      val z = UInt(3.W)
+    }
+    class B extends Bundle {
+      val x = UInt(3.W)
+      val y = UInt(3.W)
+    }
+    class C extends Bundle {
+      val y = UInt(3.W)
+      val z = UInt(3.W)
+    }
+    class MyModule extends Module {
+      val io = IO(new Bundle {
+        val a = Input(new A)
+        val b = Output(new B)
+        val c = Output(new C)
+        val inc = Input(new C)
+        val outa = Output(new A)
+      })
+      io.b <> io.a.viewAsSupertype(new B)
+      io.c <> io.a.viewAsSupertype(new C)
+      io.outa.viewAsSupertype(new C) <> io.inc
+    }
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
+    chirrtl should include("io.b.x <= io.a.x")
+    chirrtl should include("io.c.z <= io.a.z")
+    chirrtl should include("io.outa.z <= io.inc.z")
+    chirrtl should include("io.outa.y <= io.inc.y")
+  }
+
+  it should "support viewing structural supertypes with bundles" in {
+    class Foo extends Bundle {
+      val y = UInt(3.W)
+    }
+    class A extends Bundle {
+      val foo = new Foo
+      val x = UInt(3.W)
+      val z = UInt(3.W)
+    }
+    class B extends Bundle {
+      val x = UInt(3.W)
+      val foo = new Foo
+    }
+    class C extends Bundle {
+      val foo = new Foo
+      val z = UInt(3.W)
+    }
+    class MyModule extends Module {
+      val io = IO(new Bundle {
+        val a = Input(new A)
+        val b = Output(new B)
+        val c = Output(new C)
+        val inc = Input(new C)
+        val outa = Output(new A)
+      })
+      io.b <> io.a.viewAsSupertype(new B)
+      io.c <> io.a.viewAsSupertype(new C)
+      io.outa.viewAsSupertype(new C) <> io.inc
+    }
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
+    chirrtl should include("io.b.x <= io.a.x")
+    chirrtl should include("io.c.z <= io.a.z")
+    chirrtl should include("io.outa.foo <= io.inc.foo")
+    chirrtl should include("io.b.foo <= io.a.foo")
+    chirrtl should include("io.c.foo <= io.a.foo")
+  }
+
+  it should "error during elaboration for sub-type errors that cannot be found at compile-time" in {
+    class A extends Bundle {
+      val x = UInt(3.W)
+      val y = UInt(4.W)
+      val z = UInt(3.W)
+    }
+    class B extends Bundle {
+      val x = UInt(3.W)
+      val y = UInt(3.W)
+    }
+    class MyModule extends Module {
+      val io = IO(new Bundle {
+        val a = Input(new A)
+        val b = Output(new B)
+      })
+      io.b <> io.a.viewAsSupertype(new B)
+    }
+    a[ChiselException] should be thrownBy (ChiselStage.emitSystemVerilog(new MyModule))
+  }
+
+  it should "support viewing structural supertypes with generated types" in {
+    class Foo extends Bundle {
+      val foo = UInt(8.W)
+    }
+    class Bar extends Foo {
+      val bar = UInt(8.W)
+    }
+    class MyInterface[T <: Data](gen: () => T) extends Bundle {
+      val foo = gen()
+      val fizz = UInt(8.W)
+      val buzz = UInt(8.W)
+    }
+    class MyModule extends Module {
+      val fooIf = IO(Input(new MyInterface(() => UInt(8.W))))
+      val fooOut = IO(Output(new Foo))
+      fooOut <> fooIf.viewAsSupertype(new Foo)
+    }
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
+  }
+
+  it should "throw a type error for structural non-supertypes with different members" in {
+    assertTypeError("""
+      class A extends Bundle {
+        val x = UInt(3.W)
+        val y = UInt(3.W)
+        val z = UInt(3.W)
+      }
+      class B extends Bundle {
+        val x = UInt(3.W)
+        val y = UInt(3.W)
+      }
+      class MyModule extends Module {
+        val io = IO(new Bundle{
+          val a = Input(new A)
+          val b = Output(new B)
+        })
+        io.a <> io.b.viewAsSupertype(new A)
+      }
+      """)
+  }
+
+  it should "throw a type error for structural non-supertypes with different types" in {
+    assertTypeError("""
+      class A extends Bundle {
+        val x = SInt(3.W)
+        val y = UInt(3.W)
+        val z = UInt(3.W)
+      }
+      class B extends Bundle {
+        val x = UInt(3.W)
+        val y = UInt(3.W)
+      }
+      class MyModule extends Module {
+        val io = IO(new Bundle{
+          val a = Input(new A)
+          val b = Output(new B)
+        })
+        io.b <> io.a.viewAsSupertype(new B)
+      }
+      """)
   }
 
   it should "error if viewing a parent Bundle as a child Bundle type" in {
@@ -215,7 +399,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val abCat = aBits.viewAs[UInt] ## bBits.viewAs[UInt]
       bitsCat := abCat
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     val expected = List(
       "node x = and(a, b.value)",
       "and <= x",
@@ -239,7 +423,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val cat = barIn.viewAs[Vec[UInt]].asUInt
       fooOut := cat
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("node cat = cat(barIn.foo, barIn.bar)")
     chirrtl should include("fooOut <= cat")
   }
@@ -261,7 +445,7 @@ class DataViewSpec extends ChiselFlatSpec {
       y := a.viewAs[Fizz]
       z := b.viewAs[Bar].viewAs[Fizz]
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("y.fizz <= a.foo")
     chirrtl should include("z.fizz <= b.foo")
   }
@@ -276,7 +460,7 @@ class DataViewSpec extends ChiselFlatSpec {
       Seq(y, z) := Mux(sel, Seq(a, b).viewAs, Seq(c, d).viewAs[Vec[UInt]])
     }
     // Verilog instead of CHIRRTL because the optimizations make it much prettier
-    val verilog = ChiselStage.emitVerilog(new MyModule)
+    val verilog = ChiselStage.emitSystemVerilog(new MyModule)
     verilog should include("assign y = sel ? a : c;")
     verilog should include("assign z = sel ? b : d;")
   }
@@ -290,7 +474,7 @@ class DataViewSpec extends ChiselFlatSpec {
       Seq(x, y, z) := VecInit(a, b, c)
     }
     // Verilog instead of CHIRRTL because the optimizations make it much prettier
-    val verilog = ChiselStage.emitVerilog(new MyModule)
+    val verilog = ChiselStage.emitSystemVerilog(new MyModule)
     verilog should include("assign x = a;")
     verilog should include("assign y = b;")
     verilog should include("assign z = c;")
@@ -306,7 +490,7 @@ class DataViewSpec extends ChiselFlatSpec {
       // We could also overload `VecInit` instead of relying on the implicit conversion
       Seq((w, x), (y, z)) := VecInit[HWTuple2[UInt, UInt]]((a, b), (c, d))
     }
-    val verilog = ChiselStage.emitVerilog(new MyModule)
+    val verilog = ChiselStage.emitSystemVerilog(new MyModule)
     verilog should include("assign w = a;")
     verilog should include("assign x = b;")
     verilog should include("assign y = c;")
@@ -327,7 +511,7 @@ class DataViewSpec extends ChiselFlatSpec {
       selected := dataIn
       dataOut := selected
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("vec[addr] <= dataIn")
     chirrtl should include("dataOut <= vec[addr]")
   }
@@ -357,7 +541,7 @@ class DataViewSpec extends ChiselFlatSpec {
       selected := dataIn
       dataOut := selected
     }
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     chirrtl should include("vec[addrReg] <= dataIn")
     chirrtl should include("dataOut <= vec[addrReg]")
   }
@@ -377,7 +561,7 @@ class DataViewSpec extends ChiselFlatSpec {
       (outA, outB) := selected
     }
     (the[InvalidViewException] thrownBy {
-      ChiselStage.emitChirrtl(new MyModule)
+      ChiselStage.emitCHIRRTL(new MyModule)
     }).getMessage should include("Dynamic indexing of Views is not yet supported")
   }
 
@@ -390,7 +574,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(tpe))
       out := in.viewAs[MyBundle]
     }
-    val err = the[InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the[InvalidViewException] thrownBy (ChiselStage.emitSystemVerilog(new MyModule))
     err.toString should include("View field '_.foo' is missing")
   }
 
@@ -401,7 +585,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(UInt(8.W)))
       out := (a, b).viewAs[UInt]
     }
-    val err = the[InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the[InvalidViewException] thrownBy (ChiselStage.emitSystemVerilog(new MyModule))
     err.toString should include("Target field '_._2' is missing")
   }
 
@@ -419,7 +603,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out := in.viewAs[BundleB]
     }
-    val err = the[InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the[InvalidViewException] thrownBy (ChiselStage.emitSystemVerilog(new MyModule))
     err.toString should include("View mapping must only contain Elements within the Target")
   }
 
@@ -438,7 +622,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out.viewAs[BundleA] := in
     }
-    val err = the[InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the[InvalidViewException] thrownBy (ChiselStage.emitSystemVerilog(new MyModule))
     err.toString should include("View mapping must only contain Elements within the View")
   }
 
@@ -455,7 +639,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out := in.viewAs[BundleB]
     }
-    val err = the[InvalidViewException] thrownBy ChiselStage.emitChirrtl(new MyModule)
+    val err = the[InvalidViewException] thrownBy ChiselStage.emitCHIRRTL(new MyModule)
     val expected = """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <8>""".r
     (err.getMessage should fullyMatch).regex(expected)
   }
@@ -473,7 +657,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new BundleB))
       out := in.viewAs[BundleB]
     }
-    val err = the[InvalidViewException] thrownBy ChiselStage.emitChirrtl(new MyModule)
+    val err = the[InvalidViewException] thrownBy ChiselStage.emitCHIRRTL(new MyModule)
     val expected =
       """View field _\.bar UInt<4> has width <4> that is incompatible with target value .+'s width <unknown>""".r
     (err.getMessage should fullyMatch).regex(expected)
@@ -491,7 +675,7 @@ class DataViewSpec extends ChiselFlatSpec {
       fizz._2 <> DontCare
     }
 
-    val chirrtl = ChiselStage.emitChirrtl(new MyModule)
+    val chirrtl = ChiselStage.emitCHIRRTL(new MyModule)
     val expected = ('a' to 'f').map(c => s"$c is invalid")
     for (line <- expected) {
       chirrtl should include(line)
@@ -508,7 +692,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(new MyBundle(UInt(8.W), UInt(8.W))))
       out := in.viewAs[MyBundle]
     }
-    val err = the[InvalidViewException] thrownBy (ChiselStage.emitVerilog(new MyModule))
+    val err = the[InvalidViewException] thrownBy (ChiselStage.emitSystemVerilog(new MyModule))
     err.toString should include("View field '_.foo' is missing")
   }
 
@@ -519,7 +703,7 @@ class DataViewSpec extends ChiselFlatSpec {
       val out = IO(Output(UInt(8.W)))
       out := (a, b).viewAs[UInt]
     }
-    val verilog = ChiselStage.emitVerilog(new MyModule)
+    val verilog = ChiselStage.emitSystemVerilog(new MyModule)
     verilog should include("assign out = b;")
   }
 }

@@ -4,8 +4,9 @@ package chiselTests
 
 import chisel3._
 import chisel3.experimental._
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 import chisel3.testers.{BasicTester, TesterDriver}
+import chisel3.reflect.DataMirror
 
 // Avoid collisions with regular BlackBox tests by putting ExtModule blackboxes
 // in their own scope.
@@ -88,6 +89,17 @@ class ExtModuleWithFlatIOTester extends Module {
   io <> inst.badIO
 }
 
+class ExtModuleInvalidatedTester extends Module {
+  val in = IO(Input(UInt(8.W)))
+  val out = IO(Output(UInt(8.W)))
+  val inst = Module(new ExtModule {
+    val in = IO(Input(UInt(8.W)))
+    val out = IO(Output(UInt(8.W)))
+  })
+  inst.in := in
+  out := inst.out
+}
+
 class ExtModuleSpec extends ChiselFlatSpec {
   "A ExtModule inverter" should "work" in {
     assertTesterPasses({ new ExtModuleTester }, Seq("/chisel3/BlackBoxTest.v"), TesterDriver.verilatorOnly)
@@ -106,15 +118,21 @@ class ExtModuleSpec extends ChiselFlatSpec {
   behavior.of("ExtModule")
 
   it should "work with .suggestName (aka it should not require reflection for naming)" in {
-    val chirrtl = ChiselStage.emitChirrtl(new ExtModuleWithSuggestNameTester)
+    val chirrtl = ChiselStage.emitCHIRRTL(new ExtModuleWithSuggestNameTester)
     chirrtl should include("input foo : UInt<8>")
     chirrtl should include("inst.foo <= in")
   }
 
   it should "work with FlatIO" in {
-    val chirrtl = ChiselStage.emitChirrtl(new ExtModuleWithFlatIOTester)
+    val chirrtl = ChiselStage.emitCHIRRTL(new ExtModuleWithFlatIOTester)
     chirrtl should include("io.out <= inst.out")
     chirrtl should include("inst.in <= io.in")
     chirrtl shouldNot include("badIO")
+  }
+
+  it should "not have invalidated ports in a chisel3._ context" in {
+    val chirrtl = ChiselStage.emitCHIRRTL(new ExtModuleInvalidatedTester)
+    chirrtl shouldNot include("inst.in is invalid")
+    chirrtl shouldNot include("inst.out is invalid")
   }
 }

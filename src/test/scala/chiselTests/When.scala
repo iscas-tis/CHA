@@ -2,8 +2,8 @@
 
 package chiselTests
 
+import circt.stage.ChiselStage
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.testers.BasicTester
 import chisel3.util._
 
@@ -79,7 +79,7 @@ class SubmoduleWhenTester extends BasicTester {
   val (cycle, done) = Counter(true.B, 3)
   when(done) { stop() }
   val children =
-    Seq(Module(new PassthroughModule), Module(new PassthroughMultiIOModule), Module(new PassthroughRawModule))
+    Seq(Module(new PassthroughModule), Module(new PassthroughModule), Module(new PassthroughRawModule))
   children.foreach { child =>
     when(cycle === 1.U) {
       child.io.in := "hdeadbeef".U

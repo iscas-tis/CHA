@@ -30,6 +30,7 @@ object decoder extends LazyLogging {
       val (plaInput, plaOutput) =
         pla(minimizedTable.table.toSeq, BitPat(minimizedTable.default.value.U(minimizedTable.default.getWidth.W)))
 
+      assert(plaOutput.isSynthesizable, s"Using DecodeTableAnnotation on non-hardware value $plaOutput")
       annotate(new ChiselAnnotation {
         override def toFirrtl: Annotation =
           DecodeTableAnnotation(plaOutput.toTarget, truthTable.toString, minimizedTable.toString)
@@ -105,8 +106,10 @@ object decoder extends LazyLogging {
         {
           bitSets.zipWithIndex.flatMap {
             case (bs, i) =>
-              bs.terms.map(bp => s"${bp.rawString}->${if (errorBit) "0"}${"0" * (bitSets.size - i - 1)}1${"0" * i}")
-          } ++ Seq(s"${if (errorBit) "1"}${"?" * bitSets.size}")
+              bs.terms.map(bp =>
+                s"${bp.rawString}->${if (errorBit) "0" else ""}${"0" * (bitSets.size - i - 1)}1${"0" * i}"
+              )
+          } ++ Seq(s"${if (errorBit) "1" ++ "0" * bitSets.size else "?" * bitSets.size}")
         }.mkString("\n")
       )
     )

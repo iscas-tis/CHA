@@ -2,12 +2,12 @@
 
 package chiselTests
 
-import org.scalacheck._
-
+import circt.stage.ChiselStage
 import chisel3._
 import chisel3.testers.BasicTester
 import chisel3.util._
 import chisel3.util.random.LFSR
+import org.scalacheck._
 
 class ThingsPassThroughTester(
   elements:       Seq[Int],
@@ -19,7 +19,7 @@ class ThingsPassThroughTester(
     extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, useSyncReadMem = useSyncReadMem, hasFlush = hasFlush))
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -45,7 +45,7 @@ class QueueReasonableReadyValid(elements: Seq[Int], queueDepth: Int, bitWidth: I
     extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, useSyncReadMem = useSyncReadMem))
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -155,7 +155,7 @@ class QueueFlowTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: I
     extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, flow = true, useSyncReadMem = useSyncReadMem))
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -186,7 +186,7 @@ class QueueFactoryTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap
   val deq = Queue(enq, queueDepth, useSyncReadMem = useSyncReadMem)
 
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -209,9 +209,6 @@ class QueueFactoryTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap
 }
 
 class QueueSpec extends ChiselPropSpec {
-  // Disable shrinking on error.
-  implicit val noShrinkListVal = Shrink[List[Int]](_ => Stream.empty)
-  implicit val noShrinkInt = Shrink[Int](_ => Stream.empty)
 
   property("Queue should have things pass through") {
     forAll(vecSizes, safeUIntN(20), Gen.choose(0, 15), Gen.oneOf(true, false)) { (depth, se, tap, isSync) =>
@@ -290,5 +287,20 @@ class QueueSpec extends ChiselPropSpec {
     }
     (new chisel3.stage.phases.Elaborate)
       .transform(Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new IrrevocableQueue)))
+  }
+
+  property("Queue.apply should have decent names") {
+    class HasTwoQueues extends Module {
+      val in = IO(Flipped(Decoupled(UInt(8.W))))
+      val out = IO(Decoupled(UInt(8.W)))
+
+      val foo = Queue(in, 2)
+      val bar = Queue(foo, 2)
+      out <> bar
+    }
+
+    val chirrtl = ChiselStage.emitCHIRRTL(new HasTwoQueues)
+    chirrtl should include("inst foo_q of Queue")
+    chirrtl should include("inst bar_q of Queue")
   }
 }

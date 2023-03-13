@@ -3,8 +3,8 @@
 package chisel3
 
 import chisel3.ExplicitCompileOptions.Strict
-import chisel3.experimental.DataMirror.internal.chiselTypeClone
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3.reflect.DataMirror.internal.chiselTypeClone
+import chisel3.experimental.SourceInfo
 
 /** Package for experimental features, which may have their API changed, be removed, etc.
   *
@@ -22,7 +22,12 @@ package object experimental {
   implicit def fromDoubleToDoubleParam(x: Double): DoubleParam = DoubleParam(x)
   implicit def fromStringToStringParam(x: String): StringParam = StringParam(x)
 
-  type ChiselEnum = EnumFactory
+  @deprecated("This type has moved to chisel3", "Chisel 3.5")
+  type ChiselEnum = chisel3.ChiselEnum
+  @deprecated("This type has moved to chisel3", "Chisel 3.5")
+  type EnumType = chisel3.EnumType
+  @deprecated("This type has moved to chisel3", "Chisel 3.5")
+  val suppressEnumCastWarning = chisel3.suppressEnumCastWarning
 
   // Rocket Chip-style clonemodule
 
@@ -45,15 +50,40 @@ package object experimental {
     def apply(
       proto: BaseModule
     )(
-      implicit sourceInfo: chisel3.internal.sourceinfo.SourceInfo,
+      implicit sourceInfo: chisel3.experimental.SourceInfo,
       compileOptions:      CompileOptions
     ): ClonePorts = {
       BaseModule.cloneIORecord(proto)
     }
   }
 
-  val requireIsHardware = chisel3.internal.requireIsHardware
-  val requireIsChiselType = chisel3.internal.requireIsChiselType
+  /** Requires that a node is hardware ("bound")
+    */
+  object requireIsHardware {
+    def apply(node: Data, msg: String = ""): Unit = {
+      node._parent match { // Compatibility layer hack
+        case Some(x) => x._compatAutoWrapPorts()
+        case _       =>
+      }
+      if (!node.isSynthesizable) {
+        val prefix = if (msg.nonEmpty) s"$msg " else ""
+        throw ExpectedHardwareException(
+          s"$prefix'$node' must be hardware, " +
+            "not a bare Chisel type. Perhaps you forgot to wrap it in Wire(_) or IO(_)?"
+        )
+      }
+    }
+  }
+
+  /** Requires that a node is a chisel type (not hardware, "unbound")
+    */
+  object requireIsChiselType {
+    def apply(node: Data, msg: String = ""): Unit = if (node.isSynthesizable) {
+      val prefix = if (msg.nonEmpty) s"$msg " else ""
+      throw ExpectedChiselTypeException(s"$prefix'$node' must be a Chisel type, not hardware")
+    }
+  }
+
   type Direction = ActualDirection
   val Direction = ActualDirection
 
@@ -62,7 +92,7 @@ package object experimental {
     import dataview._
     def coerceDirection(d: Data) = {
       import chisel3.{SpecifiedDirection => SD}
-      DataMirror.specifiedDirectionOf(gen) match {
+      chisel3.reflect.DataMirror.specifiedDirectionOf(gen) match {
         case SD.Flip   => Flipped(d)
         case SD.Input  => Input(d)
         case SD.Output => Output(d)
@@ -72,7 +102,7 @@ package object experimental {
     val ports: Seq[Data] =
       gen.elements.toSeq.reverse.map {
         case (name, data) =>
-          val p = IO(coerceDirection(chiselTypeClone(data).asInstanceOf[Data]))
+          val p = chisel3.IO(coerceDirection(chiselTypeClone(data).asInstanceOf[Data]))
           p.suggestName(name)
           p
 
@@ -103,64 +133,35 @@ package object experimental {
   class dump extends chisel3.internal.naming.dump
   class treedump extends chisel3.internal.naming.treedump
 
-  /** Experimental macro for naming Chisel hardware values
+  /** Generate prefixes from values of this type in the Chisel compiler plugin
     *
-    * By default, Chisel uses reflection for naming which only works for public fields of `Bundle`
-    * and `Module` classes. Applying this macro annotation to a `class` or `object` enables Chisel
-    * to name any hardware values within the annotated `class` or `object.
+    * Users can mixin this trait to tell the Chisel compiler plugin to include the names of
+    * vals of this type when generating prefixes for naming `Data` and `Mem` instances.
+    * This is generally useful whenever creating a `class` that contains `Data`, `Mem`,
+    * or `Module` instances but does not itself extend `Data` or `Module`.
+    *
+    * @see See [[https://www.chisel-lang.org/chisel3/docs/explanations/naming.html the compiler plugin documentation]] for more information on this process.
     *
     * @example {{{
     * import chisel3._
-    * import chisel3.experimental.chiselName
+    * import chisel3.experimental.AffectsChiselPrefix
     *
-    * @chiselName
     * class MyModule extends Module {
-    *   val io = IO(new Bundle {
-    *     val in = Input(UInt(8.W))
-    *     val out = Output(UInt(8.W))
-    *   })
-    *   def createReg(): Unit = {
-    *     // @chiselName allows Chisel to name this Reg
-    *     val myReg = RegInit(io.in)
-    *     io.out := myReg
+    *   // Note: This contains a Data but is not a named component itself
+    *   class NotAData extends AffectsChiselPrefix {
+    *     val value = Wire(Bool())
     *   }
-    *   createReg()
+    *
+    *   // Name with AffectsChiselPrefix:    "nonData_value"
+    *   // Name without AffectsChiselPrefix: "value"
+    *   val nonData = new NotAData
+    *
+    *   // Name with AffectsChiselPrefix:    "nonData2_value"
+    *   // Name without AffectsChiselPrefix: "value_1"
+    *   val nonData2 = new NotAData
     * }
-    * }}}
     */
-  class chiselName extends chisel3.internal.naming.chiselName
-
-  /** Do not name instances of this type in [[chiselName]]
-    *
-    * By default, `chiselName` will include `val` names of instances of annotated classes as a
-    * prefix in final naming. Mixing in this trait to a `class`, `object`, or anonymous `class`
-    * instances will exclude the `val` name from `chiselName` naming.
-    *
-    * @example {{{
-    * import chisel3._
-    * import chisel3.experimental.{chiselName, NoChiselNamePrefix}
-    *
-    * // Note that this is not a Module
-    * @chiselName
-    * class Counter(w: Int) {
-    *   val myReg = RegInit(0.U(w.W))
-    *   myReg := myReg + 1.U
-    * }
-    *
-    * @chiselName
-    * class MyModule extends Module {
-    *   val io = IO(new Bundle {
-    *     val out = Output(UInt(8.W))
-    *   })
-    *   // Name of myReg will be "counter0_myReg"
-    *   val counter0 = new Counter(8)
-    *   // Name of myReg will be "myReg"
-    *   val counter1 = new Counter(8) with NoChiselNamePrefix
-    *   io.out := counter0.myReg + counter1.myReg
-    * }
-    * }}}
-    */
-  trait NoChiselNamePrefix
+  trait AffectsChiselPrefix
 
   object BundleLiterals {
     implicit class AddBundleLiteralConstructor[T <: Record](x: T) {
@@ -200,11 +201,6 @@ package object experimental {
       }
     }
   }
-
-  // Use to add a prefix to any component generated in input scope
-  val prefix = chisel3.internal.prefix
-  // Use to remove prefixes not in provided scope
-  val noPrefix = chisel3.internal.noPrefix
 
   // ****************************** Hardware equivalents of Scala Tuples ******************************
   // These are intended to be used via DataView
@@ -537,4 +533,7 @@ package object experimental {
       "_10" -> _10
     )
   }
+
+  @deprecated("This value has moved to chisel3.reflect", "Chisel 3.6")
+  val DataMirror = chisel3.reflect.DataMirror
 }

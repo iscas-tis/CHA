@@ -2,8 +2,7 @@
 
 package chisel3.experimental.hierarchy.core
 
-import chisel3.experimental.BaseModule
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3.experimental.{BaseModule, SourceInfo}
 import chisel3.experimental.hierarchy.{InstanceClone, InstantiableClone, ModuleClone}
 
 import scala.annotation.implicitNotFound
@@ -70,6 +69,7 @@ object Lookupable {
             newChild.bind(internal.CrossModuleBinding)
             newChild.setAllParents(Some(m))
             newChild
+          case _ => throw new InternalErrorException("Match error: newParent=$newParent")
         }
     }
   }
@@ -198,6 +198,7 @@ object Lookupable {
                 AggregateViewBinding(newMap)
             }
         }
+      case _ => throw new InternalErrorException("Match error: data.topBinding=${data.topBinding}")
     }
 
     // TODO Unify the following with `.viewAs`
@@ -214,11 +215,12 @@ object Lookupable {
             Builder.unnamedViews += agg
           case _ => // Do nothing
         }
+      case _ => throw new InternalErrorException("Match error: newBinding=$newBinding")
     }
 
     result.bind(newBinding)
     result.setAllParents(Some(ViewParent))
-    result.forceName(None, "view", Builder.viewNamespace)
+    result.forceName("view", Builder.viewNamespace)
     result
   }
 
@@ -257,6 +259,11 @@ object Lookupable {
             case Proto(p) => Proto(m)
             case Clone(p: BaseModule) =>
               clone(m, Some(p), () => m.instanceName)
+            case _ =>
+              throw new Exception(
+                s"Match Error: cloneModuleToContext(Proto(m._parent.get), context)=" +
+                  s"${cloneModuleToContext(Proto(m._parent.get), context)}"
+              )
           }
       }
     }
@@ -269,6 +276,7 @@ object Lookupable {
             val newChild = Module.do_pseudo_apply(new InstanceClone(m.getProto, () => m.instanceName))
             newChild._parent = i._parent
             Clone(newChild)
+          case _ => throw new InternalErrorException("Match error: rec(m)=${rec(m)}")
         }
       case Clone(m: InstanceClone[_]) =>
         rec(m) match {
@@ -277,7 +285,9 @@ object Lookupable {
             val newChild = Module.do_pseudo_apply(new InstanceClone(m.getProto, () => m.instanceName))
             newChild._parent = i._parent
             Clone(newChild)
+          case _ => throw new InternalErrorException("Match error: rec(m)=${rec(m)}")
         }
+      case _ => throw new InternalErrorException("Match error: module=$module")
     }
   }
 
@@ -335,11 +345,20 @@ object Lookupable {
       }
       def instanceLookup[A](that: A => B, instance: Instance[A]): C = {
         val ret = that(instance.proto)
-        val ioMap: Option[Map[Data, Data]] = instance.underlying match {
-          case Clone(x: ModuleClone[_]) => Some(x.ioMap)
-          case Proto(x: BaseModule) => Some(x.getChiselPorts.map { case (_, data) => data -> data }.toMap)
-          case _ => None
+
+        def getIoMap(hierarchy: Hierarchy[_]): Option[Map[Data, Data]] = {
+          hierarchy.underlying match {
+            case Clone(x: ModuleClone[_]) => Some(x.ioMap)
+            case Proto(x: BaseModule) => Some(x.getChiselPorts.map { case (_, data) => data -> data }.toMap)
+            case Clone(x: InstantiableClone[_]) => getIoMap(x._innerContext)
+            case Clone(x: InstanceClone[_]) => None
+            case other => {
+              Builder.exception(s"Internal Error! Unexpected case where we can't get IO Map: $other")
+            }
+          }
         }
+        val ioMap = getIoMap(instance)
+
         if (isView(ret)) {
           cloneViewToContext(ret, instance.cache, ioMap, instance.getInnerDataContext)
         } else {
@@ -373,6 +392,8 @@ object Lookupable {
             Builder.currentModule = existingMod
             newChild.setRef(mem.getRef, true)
             newChild
+          case _ =>
+            throw new InternalErrorException("Match error: newParent=$newParent")
         }
     }
   }

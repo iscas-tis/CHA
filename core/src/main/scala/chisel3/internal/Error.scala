@@ -3,9 +3,13 @@
 package chisel3.internal
 
 import scala.annotation.tailrec
-import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
+import scala.collection.mutable.{ArrayBuffer, LinkedHashMap, LinkedHashSet}
 import scala.util.control.NoStackTrace
 import _root_.logger.Logger
+import java.io.File
+import scala.io.Source
+
+import chisel3.experimental.{NoSourceInfo, SourceInfo, SourceLine, UnlocatableSourceInfo}
 
 object ExceptionHelpers {
 
@@ -80,93 +84,13 @@ object ExceptionHelpers {
     }
 
   }
-
 }
 
-class ChiselException(message: String, cause: Throwable = null) extends Exception(message, cause, true, true) {
-
-  /** Package names whose stack trace elements should be trimmed when generating a trimmed stack trace */
-  @deprecated("Use ExceptionHelpers.packageTrimlist. This will be removed in Chisel 3.6", "Chisel 3.5")
-  val blacklistPackages: Set[String] = Set("chisel3", "scala", "java", "sun", "sbt")
-
-  /** The object name of Chisel's internal `Builder`. Everything stack trace element after this will be trimmed. */
-  @deprecated("Use ExceptionHelpers.builderName. This will be removed in Chisel 3.6", "Chisel 3.5")
-  val builderName: String = chisel3.internal.Builder.getClass.getName
-
-  /** Examine a [[Throwable]], to extract all its causes. Innermost cause is first.
-    * @param throwable an exception to examine
-    * @return a sequence of all the causes with innermost cause first
-    */
-  @tailrec
-  private def getCauses(throwable: Throwable, acc: Seq[Throwable] = Seq.empty): Seq[Throwable] =
-    throwable.getCause() match {
-      case null => throwable +: acc
-      case a    => getCauses(a, throwable +: acc)
-    }
-
-  /** Returns true if an exception contains */
-  private def containsBuilder(throwable: Throwable): Boolean =
-    throwable
-      .getStackTrace()
-      .collectFirst {
-        case ste if ste.getClassName().startsWith(ExceptionHelpers.builderName) => throwable
-      }
-      .isDefined
-
-  /** Examine this [[ChiselException]] and it's causes for the first [[Throwable]] that contains a stack trace including
-    * a stack trace element whose declaring class is the [[builderName]]. If no such element exists, return this
-    * [[ChiselException]].
-    */
-  private lazy val likelyCause: Throwable =
-    getCauses(this).collectFirst { case a if containsBuilder(a) => a }.getOrElse(this)
-
-  /** For an exception, return a stack trace trimmed to user code only
-    *
-    * This does the following actions:
-    *
-    *   1. Trims the top of the stack trace while elements match [[blacklistPackages]]
-    *   2. Trims the bottom of the stack trace until an element matches [[builderName]]
-    *   3. Trims from the [[builderName]] all [[blacklistPackages]]
-    *
-    * @param throwable the exception whose stack trace should be trimmed
-    * @return an array of stack trace elements
-    */
-  private def trimmedStackTrace(throwable: Throwable): Array[StackTraceElement] = {
-    def isBlacklisted(ste: StackTraceElement) = {
-      val packageName = ste.getClassName().takeWhile(_ != '.')
-      blacklistPackages.contains(packageName)
-    }
-
-    val trimmedLeft = throwable.getStackTrace().view.dropWhile(isBlacklisted)
-    val trimmedReverse = trimmedLeft.toIndexedSeq.reverse.view
-      .dropWhile(ste => !ste.getClassName.startsWith(builderName))
-      .dropWhile(isBlacklisted)
-    trimmedReverse.toIndexedSeq.reverse.toArray
-  }
-
-  @deprecated(
-    "Use extension method trimStackTraceToUserCode defined in ExceptionHelpers.ThrowableHelpers. " +
-      "This will be removed in Chisel 3.6",
-    "Chisel 3.5.0"
-  )
-  def chiselStackTrace: String = {
-    val trimmed = trimmedStackTrace(likelyCause)
-
-    val sw = new java.io.StringWriter
-    sw.write(likelyCause.toString + "\n")
-    sw.write("\t...\n")
-    trimmed.foreach(ste => sw.write(s"\tat $ste\n"))
-    sw.write(
-      "\t... (Stack trace trimmed to user code only, rerun with --full-stacktrace if you wish to see the full stack trace)\n"
-    )
-    sw.toString
-  }
-}
-private[chisel3] class Errors(message: String) extends ChiselException(message) with NoStackTrace
+private[chisel3] class Errors(message: String) extends chisel3.ChiselException(message) with NoStackTrace
 
 private[chisel3] object throwException {
   def apply(s: String, t: Throwable = null): Nothing =
-    throw new ChiselException(s, t)
+    throw new chisel3.ChiselException(s, t)
 }
 
 /** Records and reports runtime errors and warnings. */
@@ -176,35 +100,77 @@ private[chisel3] object ErrorLog {
   val errTag = s"[${Console.RED}error${Console.RESET}]"
 }
 
-private[chisel3] class ErrorLog {
+private[chisel3] class ErrorLog(warningsAsErrors: Boolean, sourceRoots: Seq[File]) {
 
-  /** Log an error message */
-  def error(m: => String): Unit =
-    errors += new Error(m, getUserLineNumber)
-
-  /** Log a warning message */
-  def warning(m: => String): Unit =
-    errors += new Warning(m, getUserLineNumber)
-
-  /** Log a warning message without a source locator */
-  def warningNoLoc(m: => String): Unit = {
-    errors += new Warning(m, None)
+  private def getErrorLineInFile(sl: SourceLine): List[String] = {
+    def tryFileInSourceRoot(sourceRoot: File): Option[List[String]] = {
+      try {
+        val file = new File(sourceRoot, sl.filename)
+        val lines = Source.fromFile(file).getLines()
+        var i = 0
+        while (i < (sl.line - 1) && lines.hasNext) {
+          lines.next()
+          i += 1
+        }
+        val line = lines.next()
+        val caretLine = (" " * (sl.col - 1)) + "^"
+        Some(line :: caretLine :: Nil)
+      } catch {
+        case scala.util.control.NonFatal(_) => None
+      }
+    }
+    val sourceRootsWithDefault = if (sourceRoots.nonEmpty) sourceRoots else Seq(new File("."))
+    // View allows us to search the directories one at a time and early out
+    sourceRootsWithDefault.view.map(tryFileInSourceRoot(_)).collectFirst { case Some(value) => value }.getOrElse(Nil)
   }
 
-  /** Emit an informational message */
-  @deprecated("This method will be removed in 3.5", "3.4")
-  def info(m: String): Unit =
-    println(new Info("[%2.3f] %s".format(elapsedTime / 1e3, m), None))
-
-  /** Log a deprecation warning message */
-  def deprecated(m: => String, location: Option[String]): Unit = {
-    val sourceLoc = location match {
-      case Some(loc) => loc
-      case None =>
+  /** Returns an appropriate location string for the provided source info.
+    * If the source info is of `NoSourceInfo` type, the source location is looked up via stack trace.
+    * If the source info is `None`, an empty string is returned.
+    */
+  private def errorLocationString(si: Option[SourceInfo]): String = {
+    si match {
+      case Some(sl: SourceLine) => s"${sl.filename}:${sl.line}:${sl.col}"
+      case Some(_: NoSourceInfo) => {
         getUserLineNumber match {
           case Some(elt: StackTraceElement) => s"${elt.getFileName}:${elt.getLineNumber}"
           case None => "(unknown)"
         }
+      }
+      case None => ""
+    }
+  }
+
+  private def errorEntry(msg: String, si: Option[SourceInfo], isFatal: Boolean): ErrorEntry = {
+    val location = errorLocationString(si)
+    val sourceLineAndCaret = si.collect { case sl: SourceLine => getErrorLineInFile(sl) }.getOrElse(Nil)
+    val fullMessage = if (location.isEmpty) msg else s"$location: $msg"
+    ErrorEntry(fullMessage :: sourceLineAndCaret, isFatal)
+  }
+
+  /** Log an error message */
+  def error(m: String, si: SourceInfo): Unit = {
+    errors += errorEntry(m, Some(si), true)
+  }
+
+  private def warn(m: String, si: Option[SourceInfo]): ErrorEntry = errorEntry(m, si, warningsAsErrors)
+
+  /** Log a warning message */
+  def warning(m: String, si: SourceInfo): Unit = {
+    errors += warn(m, Some(si))
+  }
+
+  /** Log a warning message without a source locator. This is used when the
+    * locator wouldn't be helpful (e.g., due to lazy values).
+    */
+  def warningNoLoc(m: String): Unit =
+    errors += warn(m, None)
+
+  /** Log a deprecation warning message */
+  def deprecated(m: String, location: Option[String]): Unit = {
+    val sourceLoc = location match {
+      case Some(loc) => loc
+      case None      => errorLocationString(Some(UnlocatableSourceInfo))
     }
 
     val thisEntry = (m, sourceLoc)
@@ -217,7 +183,7 @@ private[chisel3] class ErrorLog {
       case ((message, sourceLoc), count) =>
         logger.warn(s"${ErrorLog.depTag} $sourceLoc ($count calls): $message")
     }
-    errors.foreach(e => logger.error(e.toString))
+    errors.foreach(e => logger.error(e.serialize))
 
     if (!deprecations.isEmpty) {
       logger.warn(
@@ -289,35 +255,15 @@ private[chisel3] class ErrorLog {
       .headOption
   }
 
-  private val errors = ArrayBuffer[LogEntry]()
+  private val errors = LinkedHashSet[ErrorEntry]()
   private val deprecations = LinkedHashMap[(String, String), Int]()
 
   private val startTime = System.currentTimeMillis
   private def elapsedTime: Long = System.currentTimeMillis - startTime
 }
 
-private abstract class LogEntry(msg: => String, line: Option[StackTraceElement]) {
-  def isFatal: Boolean = false
-  def format: String
+private case class ErrorEntry(lines: Seq[String], isFatal: Boolean) {
+  def tag = if (isFatal) ErrorLog.errTag else ErrorLog.warnTag
 
-  override def toString: String = line match {
-    case Some(l) => s"${format} ${l.getFileName}:${l.getLineNumber}: ${msg} in class ${l.getClassName}"
-    case None    => s"${format} ${msg}"
-  }
-
-  protected def tag(name: String, color: String): String =
-    s"[${color}${name}${Console.RESET}]"
-}
-
-private class Error(msg: => String, line: Option[StackTraceElement]) extends LogEntry(msg, line) {
-  override def isFatal: Boolean = true
-  def format:           String = tag("error", Console.RED)
-}
-
-private class Warning(msg: => String, line: Option[StackTraceElement]) extends LogEntry(msg, line) {
-  def format: String = tag("warn", Console.YELLOW)
-}
-
-private class Info(msg: => String, line: Option[StackTraceElement]) extends LogEntry(msg, line) {
-  def format: String = tag("info", Console.MAGENTA)
+  def serialize: String = lines.map(s"$tag " + _).mkString("\n")
 }

@@ -3,13 +3,12 @@
 // This file contains part of the implementation of the naming static annotation system.
 
 package chisel3.internal.naming
-import chisel3.experimental.NoChiselNamePrefix
 
 import scala.collection.mutable.Stack
 import scala.collection.mutable.ListBuffer
 
 import java.util.IdentityHashMap
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters._ //TODO: Remove when alternative is clear or 2.12 is EOL
 
 /** Recursive Function Namer overview
   *
@@ -54,7 +53,7 @@ sealed trait NamingContextInterface {
     * so that actual naming calls (HasId.suggestName) can happen.
     * Recursively names descendants, for those whose return value have an associated name.
     */
-  def namePrefix(prefix: String)
+  def namePrefix(prefix: String): Unit
 }
 
 /** Dummy implementation to allow for naming annotations in a non-Builder context.
@@ -77,7 +76,7 @@ class NamingContext extends NamingContextInterface {
     * prefixed with the name given to the reference object, if the reference object is named in the
     * scope of this context.
     */
-  def addDescendant(ref: Any, descendant: NamingContext) {
+  def addDescendant(ref: Any, descendant: NamingContext): Unit = {
     ref match {
       case ref: AnyRef =>
         // getOrElseUpdate
@@ -97,8 +96,7 @@ class NamingContext extends NamingContextInterface {
   def name[T](obj: T, name: String): T = {
     assert(!closed, "Can't name elements after namePrefix called")
     obj match {
-      case _:   NoChiselNamePrefix => // Don't name things with NoChiselNamePrefix
-      case ref: AnyRef             => items += ((ref, name))
+      case ref: AnyRef => items += ((ref, name))
       case _ =>
     }
     obj

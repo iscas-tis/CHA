@@ -4,7 +4,7 @@ package chiselTests
 package experimental
 
 import chisel3._
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 
 // NOTE This is currently an experimental API and subject to change
 // Example using a private port
@@ -15,7 +15,6 @@ class PrivatePort extends NamedModuleTester {
 
 // Example of using composition to add ports to a Module
 class CompositionalPort(module: NamedModuleTester, name: String) {
-  import chisel3.experimental.IO
   val foo = module.expectName(IO(Output(Bool())), name)
   foo.suggestName(name)
   foo := true.B
@@ -26,7 +25,7 @@ class CompositionalPortTester extends NamedModuleTester {
   val b = new CompositionalPort(this, "tart")
 }
 
-class PortsWinTester extends NamedModuleTester {
+class PortNameUniquenessTester extends NamedModuleTester {
   val wire = expectName(Wire(UInt()), "wire_1")
   val foo = expectName(Wire(UInt()).suggestName("wire"), "wire_2")
   val output = expectName(IO(Output(UInt())).suggestName("wire"), "wire")
@@ -48,8 +47,10 @@ class ProgrammaticPortsSpec extends ChiselFlatSpec with Utils {
     doTest(new CompositionalPortTester)
   }
 
-  "Ports" should "always win over internal components in naming" in {
-    doTest(new PortsWinTester)
+  "Port names" should "not conflict with any component names" in {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
+      doTest(new PortNameUniquenessTester)
+    }
   }
 
   "Module" should "ignore suggestName on clock and reset" in {

@@ -3,9 +3,7 @@
 package chiselTests
 
 import chisel3._
-import chisel3.stage.ChiselStage
-import chisel3.util.Queue
-import chisel3.internal.ChiselException
+import circt.stage.ChiselStage
 
 class ToTargetSpec extends ChiselFlatSpec with Utils {
 
@@ -42,5 +40,24 @@ class ToTargetSpec extends ChiselFlatSpec with Utils {
   it should "work with modules" in {
     val q = m.q.toTarget.toString
     assert(q == s"~$mn|Queue")
+  }
+
+  it should "error on non-hardware types and provide information" in {
+    class Example extends Module {
+      val tpe = UInt(8.W)
+
+      val in = IO(Input(tpe))
+      val out = IO(Output(tpe))
+      out := in
+    }
+
+    val e = the[ChiselException] thrownBy extractCause[ChiselException] {
+      var e: Example = null
+      circt.stage.ChiselStage.elaborate { e = new Example; e }
+      e.tpe.toTarget
+    }
+    e.getMessage should include(
+      "You cannot access the .instanceName or .toTarget of non-hardware Data: 'tpe', in module 'Example'"
+    )
   }
 }

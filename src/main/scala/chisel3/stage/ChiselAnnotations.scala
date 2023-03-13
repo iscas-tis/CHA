@@ -13,12 +13,13 @@ import firrtl.options.{
   Unserializable
 }
 import firrtl.options.Viewer.view
-import chisel3.{ChiselException, Module}
+import chisel3.{deprecatedMFCMessage, ChiselException, Module}
 import chisel3.RawModule
 import chisel3.internal.Builder
 import chisel3.internal.firrtl.{Circuit, Emitter => OldEmitter}
 import firrtl.AnnotationSeq
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 
 /** Mixin that indicates that this is an [[firrtl.annotations.Annotation]] used to generate a [[ChiselOptions]] view.
   */
@@ -26,6 +27,7 @@ sealed trait ChiselOption { this: Annotation => }
 
 /** Disable the execution of the FIRRTL compiler by Chisel
   */
+@deprecated(deprecatedMFCMessage + """ Use "--target chirrtl" with circt.stage.ChiselStage.""", "Chisel 3.6")
 case object NoRunFirrtlCompilerAnnotation
     extends NoTargetAnnotation
     with ChiselOption
@@ -79,6 +81,48 @@ case object ThrowOnFirstErrorAnnotation
 
 }
 
+/** When enabled, warnings will be treated as errors.
+  */
+case object WarningsAsErrorsAnnotation
+    extends NoTargetAnnotation
+    with ChiselOption
+    with HasShellOptions
+    with Unserializable {
+
+  val options = Seq(
+    new ShellOption[Unit](
+      longOption = "warnings-as-errors",
+      toAnnotationSeq = _ => Seq(WarningsAsErrorsAnnotation),
+      helpText = "Treat warnings as errors"
+    )
+  )
+
+}
+
+/** A root directory for source files, used for enhanced error reporting
+  *
+  * More than one may be provided. If a source file is found in more than one source root,
+  * the first match will be used in error reporting.
+  */
+case class SourceRootAnnotation(directory: File) extends NoTargetAnnotation with Unserializable with ChiselOption
+
+object SourceRootAnnotation extends HasShellOptions {
+  val options = Seq(
+    new ShellOption[String](
+      longOption = "source-root",
+      toAnnotationSeq = { dir =>
+        val f = new File(dir)
+        if (!f.isDirectory()) {
+          throw new OptionsException(s"Must be directory that exists!")
+        }
+        Seq(SourceRootAnnotation(f))
+      },
+      helpText = "Root directory for source files, used for enhanced error reporting",
+      helpValueName = Some("<file>")
+    )
+  )
+}
+
 /** Warn when reflective naming changes names of signals */
 @deprecated("Support for reflective naming has been removed, this object no longer does anything", "Chisel 3.6")
 case object WarnReflectiveNamingAnnotation
@@ -123,11 +167,17 @@ object ChiselGeneratorAnnotation extends HasShellOptions {
   def apply(name: String): ChiselGeneratorAnnotation = {
     val gen = () =>
       try {
-        Class.forName(name).asInstanceOf[Class[_ <: RawModule]].newInstance()
+        Class.forName(name).asInstanceOf[Class[_ <: RawModule]].getDeclaredConstructor().newInstance()
       } catch {
+        // The reflective instantiation will box any exceptions thrown, unbox them here.
+        // Note that this does *not* need to chain with the catches below which are triggered by an
+        // invalid name or a constructor that takes arguments rather than by the code being run
+        // itself.
+        case e: InvocationTargetException =>
+          throw e.getCause
         case e: ClassNotFoundException =>
           throw new OptionsException(s"Unable to locate module '$name'! (Did you misspell it?)", e)
-        case e: InstantiationException =>
+        case e: NoSuchMethodException =>
           throw new OptionsException(
             s"Unable to create instance of module '$name'! (Does this class take parameters?)",
             e
@@ -164,6 +214,10 @@ object CircuitSerializationAnnotation {
   case object FirrtlFileFormat extends Format {
     def extension = ".fir"
   }
+  @deprecated(
+    deprecatedMFCMessage + " Protobuf emission is deprecated and the MFC does not support reading Protobuf. Please switch to FIRRTL text emission.",
+    "Chisel 3.6"
+  )
   case object ProtoBufFileFormat extends Format {
     def extension = ".pb"
   }

@@ -19,7 +19,7 @@ class SelectTester(results: Seq[Int]) extends BasicTester {
   val added = counter + 1.U
   counter := added
   val overflow = counter >= values.length.U
-  val nreset = reset.asBool() === false.B
+  val nreset = reset.asBool === false.B
   val selected = values(counter)
   val zero = 0.U + 0.U
   var p: printf.Printf = null
@@ -68,7 +68,8 @@ class SelectSpec extends ChiselFlatSpec {
   )(
     implicit tTag: TypeTag[T]
   ): Unit = {
-    val ret = new chisel3.stage.ChiselStage().run(
+    val ret = new circt.stage.ChiselStage().execute(
+      Array("--target", "systemverilog"),
       Seq(
         new chisel3.stage.ChiselGeneratorAnnotation(dut),
         SelectAspect(selector, desired),

@@ -2,8 +2,11 @@
 
 package chiselTests
 
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 
+import scala.annotation.nowarn
+
+@nowarn("msg=Chisel compatibility mode is deprecated")
 class ModuleExplicitResetSpec extends ChiselFlatSpec {
 
   "A Module with an explicit reset in compatibility mode" should "elaborate" in {

@@ -5,7 +5,7 @@ package chiselTests
 import chisel3._
 import chisel3.util.Counter
 import chisel3.testers.{BasicTester, TesterDriver}
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 
 /** Multi-clock test of a Reg using a different clock via withClock */
 class ClockDividerTest extends BasicTester {
@@ -166,14 +166,6 @@ class MultiClockSpec extends ChiselFlatSpec with Utils {
   }
 
   "Differing clocks at memory and read accessor instantiation" should "warn" in {
-    class modMemReadDifferingClock extends Module {
-      val myClock = IO(Input(Clock()))
-      val mem = withClock(myClock) { Mem(4, UInt(8.W)) }
-      val readVal = mem.read(0.U)
-    }
-    val (logMemReadDifferingClock, _) = grabLog(ChiselStage.elaborate(new modMemReadDifferingClock))
-    logMemReadDifferingClock should include("memory is different")
-
     class modSyncReadMemReadDifferingClock extends Module {
       val myClock = IO(Input(Clock()))
       val mem = withClock(myClock) { SyncReadMem(4, UInt(8.W)) }

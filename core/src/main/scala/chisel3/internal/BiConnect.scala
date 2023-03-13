@@ -4,12 +4,11 @@ package chisel3.internal
 
 import chisel3._
 import chisel3.experimental.dataview.{isView, reify, reifyToAggregate}
-import chisel3.experimental.{attach, Analog, BaseModule}
+import chisel3.experimental.{attach, Analog, BaseModule, SourceInfo}
 import chisel3.internal.Builder.pushCommand
 import chisel3.internal.firrtl.{Connect, Converter, DefInvalid}
 
 import scala.language.experimental.macros
-import chisel3.internal.sourceinfo._
 import _root_.firrtl.passes.CheckTypes
 
 /**
@@ -45,16 +44,43 @@ private[chisel3] object BiConnect {
     BiConnectException(s": Right Record missing field ($field).")
   def MismatchedException(left: String, right: String) =
     BiConnectException(s": Left ($left) and Right ($right) have different types.")
-  def AttachAlreadyBulkConnectedException(sourceInfo: SourceInfo) =
-    BiConnectException(sourceInfo.makeMessage(": Analog previously bulk connected at " + _))
+  def AttachAlreadyBulkConnectedException(
+    analog:         String,
+    prevConnection: String,
+    newConnection:  String,
+    sourceInfo:     SourceInfo
+  ) =
+    BiConnectException(
+      sourceInfo.makeMessage(
+        s": Analog $analog previously bulk to $prevConnection is connected to $newConnection at " + _
+      )
+    )
   def DontCareCantBeSink =
     BiConnectException(": DontCare cannot be a connection sink (LHS)")
 
   /** This function is what recursively tries to connect a left and right together
     *
     * There is some cleverness in the use of internal try-catch to catch exceptions
-    * during the recursive decent and then rethrow them with extra information added.
+    * during the recursive descent and then rethrow them with extra information added.
     * This gives the user a 'path' to where in the connections things went wrong.
+    *
+    * == Chisel Semantics and how they emit to firrtl ==
+    *
+    * 1. FIRRTL Connect (all fields as seen by firrtl must match exactly)
+    *   `a <= b`
+    *
+    * 2. FIRRTL Connect (implemented as being field-blasted because we know all firrtl fields would not match exactly)
+    *   `a.foo <= b.foo, b.bar <= a.bar`
+    *
+    * 3. FIRRTL Partial Connect (firrtl will allow fields to not match exactly)
+    *   `a <- b`
+    *
+    * 4. Mixed Semantic Connect (some fields need to be handled differently)
+    *   `a.foo <= b.foo` (case 2),  `b.bar <- a.bar` (case 3)
+    *
+    * - The decision on 1 vs 2 is based on structural type -- if same type once emitted to firrtl, emit 1, otherwise emit 2
+    * - 1/2 vs 3 is based on CompileOptions at connection point e.g. at `<>` , emit 3 if `emitStrictConnects = false` for either side
+    * - 4 is a special case of 2 turning into 3 for some subfields, when either side's subfield at `extends Bundle/Record` has `emitStrictConnects = false`
     */
   def connect(
     sourceInfo:            SourceInfo,
@@ -67,15 +93,15 @@ private[chisel3] object BiConnect {
       // Handle element case (root case)
       case (left_a: Analog, right_a: Analog) =>
         try {
-          markAnalogConnected(sourceInfo, left_a, context_mod)
-          markAnalogConnected(sourceInfo, right_a, context_mod)
+          markAnalogConnected(sourceInfo, left_a, right_a, context_mod)
+          markAnalogConnected(sourceInfo, right_a, left_a, context_mod)
         } catch { // convert attach exceptions to BiConnectExceptions
           case attach.AttachException(message) => throw BiConnectException(message)
         }
         attach.impl(Seq(left_a, right_a), context_mod)(sourceInfo)
       case (left_a: Analog, DontCare) =>
         try {
-          markAnalogConnected(sourceInfo, left_a, context_mod)
+          markAnalogConnected(sourceInfo, left_a, DontCare, context_mod)
         } catch { // convert attach exceptions to BiConnectExceptions
           case attach.AttachException(message) => throw BiConnectException(message)
         }
@@ -95,7 +121,7 @@ private[chisel3] object BiConnect {
         val rightReified: Option[Aggregate] = if (isView(right_v)) reifyToAggregate(right_v) else Some(right_v)
 
         if (
-          leftReified.nonEmpty && rightReified.nonEmpty && canBulkConnectAggregates(
+          leftReified.nonEmpty && rightReified.nonEmpty && canFirrtlConnectData(
             leftReified.get,
             rightReified.get,
             sourceInfo,
@@ -140,8 +166,8 @@ private[chisel3] object BiConnect {
       // Handle Records defined in Chisel._ code by emitting a FIRRTL bulk
       // connect when possible and a partial connect otherwise
       case pair @ (left_r: Record, right_r: Record) =>
-        val notStrict =
-          Seq(left_r.compileOptions, right_r.compileOptions).contains(ExplicitCompileOptions.NotStrict)
+        val emitStrictConnects: Boolean =
+          left_r.compileOptions.emitStrictConnects && right_r.compileOptions.emitStrictConnects
 
         // chisel3 <> is commutative but FIRRTL <- is not
         val flipConnection =
@@ -152,7 +178,7 @@ private[chisel3] object BiConnect {
         val rightReified: Option[Aggregate] = if (isView(newRight)) reifyToAggregate(newRight) else Some(newRight)
 
         if (
-          leftReified.nonEmpty && rightReified.nonEmpty && canBulkConnectAggregates(
+          leftReified.nonEmpty && rightReified.nonEmpty && canFirrtlConnectData(
             leftReified.get,
             rightReified.get,
             sourceInfo,
@@ -161,40 +187,44 @@ private[chisel3] object BiConnect {
           )
         ) {
           pushCommand(Connect(sourceInfo, leftReified.get.lref, rightReified.get.lref))
-        } else if (notStrict) {
-          newLeft.bulkConnect(newRight)(sourceInfo, ExplicitCompileOptions.NotStrict)
+        } else if (!emitStrictConnects) {
+          if (connectCompileOptions.migrateBulkConnections)
+            Builder.error(s"Cannot use <> in an 'import Chisel._' file; refactor code to use :<>= instead")(sourceInfo)
+          newLeft.firrtlPartialConnect(newRight)(sourceInfo)
         } else {
           recordConnect(sourceInfo, connectCompileOptions, left_r, right_r, context_mod)
         }
 
-      // Handle Records connected to DontCare (change to NotStrict)
+      // Handle Records connected to DontCare
       case (left_r: Record, DontCare) =>
-        left_r.compileOptions match {
-          case ExplicitCompileOptions.NotStrict =>
-            left.bulkConnect(right)(sourceInfo, ExplicitCompileOptions.NotStrict)
-          case _ =>
-            // For each field in left, descend with right
-            for ((field, left_sub) <- left_r.elements) {
-              try {
-                connect(sourceInfo, connectCompileOptions, left_sub, right, context_mod)
-              } catch {
-                case BiConnectException(message) => throw BiConnectException(s".$field$message")
-              }
+        if (!left_r.compileOptions.emitStrictConnects) {
+          if (connectCompileOptions.migrateBulkConnections)
+            Builder.error(s"Cannot use <> in an 'import Chisel._' file; refactor code to use :<>= instead")(sourceInfo)
+          left.firrtlPartialConnect(right)(sourceInfo)
+        } else {
+          // For each field in left, descend with right
+          for ((field, left_sub) <- left_r.elements) {
+            try {
+              connect(sourceInfo, connectCompileOptions, left_sub, right, context_mod)
+            } catch {
+              case BiConnectException(message) => throw BiConnectException(s".$field$message")
             }
+          }
         }
       case (DontCare, right_r: Record) =>
-        right_r.compileOptions match {
-          case ExplicitCompileOptions.NotStrict =>
-            left.bulkConnect(right)(sourceInfo, ExplicitCompileOptions.NotStrict)
-          case _ =>
-            // For each field in left, descend with right
-            for ((field, right_sub) <- right_r.elements) {
-              try {
-                connect(sourceInfo, connectCompileOptions, left, right_sub, context_mod)
-              } catch {
-                case BiConnectException(message) => throw BiConnectException(s".$field$message")
-              }
+        if (!right_r.compileOptions.emitStrictConnects) {
+          if (connectCompileOptions.migrateBulkConnections)
+            Builder.error(s"Cannot use <> in an 'import Chisel._' file; refactor code to use :<>= instead")(sourceInfo)
+          left.firrtlPartialConnect(right)(sourceInfo)
+        } else {
+          // For each field in left, descend with right
+          for ((field, right_sub) <- right_r.elements) {
+            try {
+              connect(sourceInfo, connectCompileOptions, left, right_sub, context_mod)
+            } catch {
+              case BiConnectException(message) => throw BiConnectException(s".$field$message")
             }
+          }
         }
 
       // Left and right are different subtypes of Data so fail
@@ -211,9 +241,12 @@ private[chisel3] object BiConnect {
     context_mod:           RawModule
   ): Unit = {
     // Verify right has no extra fields that left doesn't have
-    for ((field, right_sub) <- right_r.elements) {
-      if (!left_r.elements.isDefinedAt(field)) {
-        if (connectCompileOptions.connectFieldsMustMatch) {
+
+    // For each field in left, descend with right.
+    // Don't bother doing this check if we don't expect it to necessarily pass.
+    if (connectCompileOptions.connectFieldsMustMatch) {
+      for ((field, right_sub) <- right_r.elements) {
+        if (!left_r.elements.isDefinedAt(field)) {
           throw MissingLeftFieldException(field)
         }
       }
@@ -235,20 +268,23 @@ private[chisel3] object BiConnect {
     }
   }
 
-  /** Check whether two aggregates can be bulk connected (<=) in FIRRTL. From the
-    * FIRRTL specification, the following must hold for bulk connection:
+  /** Check whether two Data can be bulk connected (<=) in FIRRTL. From the
+    * FIRRTL specification, the following must hold for FIRRTL connection:
     *
-    *   1. The types of the left-hand and right-hand side expressions must be
-    *       equivalent.
+    *   1. The Chisel types of the left-hand and right-hand side expressions must be
+    *       equivalent (and thus will become the same FIRRTL type).
     *   2. The bit widths of the two expressions must allow for data to always
     *        flow from a smaller bit width to an equal size or larger bit width.
     *   3. The flow of the left-hand side expression must be sink or duplex
     *   4. Either the flow of the right-hand side expression is source or duplex,
     *      or the right-hand side expression has a passive type.
+    *   5. No analog connections
+    *
+    * @param raiseIfFalse raise a BiConnectException if the result would be false with information about why it's false.
     */
-  private[chisel3] def canBulkConnectAggregates(
-    sink:                  Aggregate,
-    source:                Aggregate,
+  private[chisel3] def canFirrtlConnectData(
+    sink:                  Data,
+    source:                Data,
     sourceInfo:            SourceInfo,
     connectCompileOptions: CompileOptions,
     context_mod:           RawModule
@@ -262,7 +298,7 @@ private[chisel3] object BiConnect {
 
     // check records live in appropriate contexts
     def contextCheck =
-      MonoConnect.aggregateConnectContextCheck(
+      MonoConnect.dataConnectContextCheck(
         sourceInfo,
         connectCompileOptions,
         sink,
@@ -277,12 +313,17 @@ private[chisel3] object BiConnect {
     }
 
     // check data can flow between provided aggregates
-    def flow_check = MonoConnect.canBeSink(sink, context_mod) && MonoConnect.canBeSource(source, context_mod)
+    def flowSinkCheck = MonoConnect.canBeSink(sink, context_mod)
+    def flowSourceCheck = MonoConnect.canBeSource(source, context_mod)
 
     // do not bulk connect source literals (results in infinite recursion from calling .ref)
-    def sourceNotLiteralCheck = source.topBinding match {
-      case _: LitBinding => false
-      case _ => true
+    def sourceAndSinkNotLiteralOrViewCheck = List(source, sink).forall {
+      _.topBinding match {
+        case _: LitBinding           => false
+        case _: ViewBinding          => false
+        case _: AggregateViewBinding => false
+        case _ => true
+      }
     }
 
     // do not bulk connect the 'io' pseudo-bundle of a BlackBox since it will be decomposed in FIRRTL
@@ -291,7 +332,7 @@ private[chisel3] object BiConnect {
       case _ => true
     }
 
-    typeCheck && contextCheck && bindingCheck && flow_check && sourceNotLiteralCheck && blackBoxCheck
+    typeCheck && contextCheck && bindingCheck && flowSinkCheck && flowSourceCheck && sourceAndSinkNotLiteralOrViewCheck && blackBoxCheck
   }
 
   // These functions (finally) issue the connection operation
@@ -335,14 +376,15 @@ private[chisel3] object BiConnect {
     val left_mod:  BaseModule = left.topBinding.location.getOrElse(context_mod)
     val right_mod: BaseModule = right.topBinding.location.getOrElse(context_mod)
 
-    val left_parent = Builder.retrieveParent(left_mod, context_mod).getOrElse(None)
-    val right_parent = Builder.retrieveParent(right_mod, context_mod).getOrElse(None)
+    val left_parent_opt = Builder.retrieveParent(left_mod, context_mod)
+    val right_parent_opt = Builder.retrieveParent(right_mod, context_mod)
+    val context_mod_opt = Some(context_mod)
 
     val left_direction = BindingDirection.from(left.topBinding, left.direction)
     val right_direction = BindingDirection.from(right.topBinding, right.direction)
 
     // CASE: Context is same module as left node and right node is in a child module
-    if ((left_mod == context_mod) && (right_parent == context_mod)) {
+    if ((left_mod == context_mod) && (right_parent_opt == context_mod_opt)) {
       // Thus, right node better be a port node and thus have a direction hint
       ((left_direction, right_direction): @unchecked) match {
         //    CURRENT MOD   CHILD MOD
@@ -359,7 +401,7 @@ private[chisel3] object BiConnect {
     }
 
     // CASE: Context is same module as right node and left node is in child module
-    else if ((right_mod == context_mod) && (left_parent == context_mod)) {
+    else if ((right_mod == context_mod) && (left_parent_opt == context_mod_opt)) {
       // Thus, left node better be a port node and thus have a direction hint
       ((left_direction, right_direction): @unchecked) match {
         //    CHILD MOD     CURRENT MOD
@@ -402,7 +444,7 @@ private[chisel3] object BiConnect {
     // CASE: Context is the parent module of both the module containing left node
     //                                        and the module containing right node
     //   Note: This includes case when left and right in same module but in parent
-    else if ((left_parent == context_mod) && (right_parent == context_mod)) {
+    else if ((left_parent_opt == context_mod_opt) && (right_parent_opt == context_mod_opt)) {
       // Thus both nodes must be ports and have a direction hint
       ((left_direction, right_direction): @unchecked) match {
         //    CHILD MOD     CHILD MOD
@@ -432,12 +474,13 @@ private[chisel3] object BiConnect {
   }
 
   // This function checks if analog element-level attaching is allowed, then marks the Analog as connected
-  def markAnalogConnected(implicit sourceInfo: SourceInfo, analog: Analog, contextModule: RawModule): Unit = {
+  def markAnalogConnected(sourceInfo: SourceInfo, analog: Analog, otherAnalog: Data, contextModule: RawModule): Unit = {
     analog.biConnectLocs.get(contextModule) match {
-      case Some(sl) => throw AttachAlreadyBulkConnectedException(sl)
-      case None     => // Do nothing
+      case Some((si, data)) if data != otherAnalog =>
+        throw AttachAlreadyBulkConnectedException(analog.toString, data.toString, otherAnalog.toString, si)
+      case _ => // Do nothing
     }
     // Mark bulk connected
-    analog.biConnectLocs(contextModule) = sourceInfo
+    analog.biConnectLocs(contextModule) = (sourceInfo, otherAnalog)
   }
 }

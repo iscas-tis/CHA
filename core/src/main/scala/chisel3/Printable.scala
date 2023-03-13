@@ -62,7 +62,7 @@ object Printable {
   /** Pack standard printf fmt, args* style into Printable
     */
   def pack(fmt: String, data: Data*): Printable = {
-    val args = data.toIterator
+    val args = data.iterator
     // Error handling
     def carrotAt(index: Int) = (" " * index) + "^"
     def errorMsg(index: Int) =
@@ -133,6 +133,19 @@ object Printable {
 
     val bufEscapeBackSlash = buf.map(_.replace("\\", "\\\\"))
     StringContext(bufEscapeBackSlash.toSeq: _*).cf(data: _*)
+  }
+
+  private[chisel3] def checkScope(message: Printable): Unit = {
+    def getData(x: Printable): Seq[Data] = {
+      x match {
+        case y: FirrtlFormat => Seq(y.bits)
+        case Name(d)       => Seq(d)
+        case FullName(d)   => Seq(d)
+        case Printables(p) => p.flatMap(getData(_)).toSeq
+        case _             => Seq() // Handles subtypes PString and Percent
+      }
+    }
+    getData(message).foreach(_.requireVisible())
   }
 }
 

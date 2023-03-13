@@ -7,22 +7,30 @@ import scala.language.experimental.macros
 import chisel3.internal._
 import chisel3.internal.Builder.pushCommand
 import chisel3.internal.firrtl._
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3.experimental.SourceInfo
 
+import scala.annotation.nowarn
 import scala.reflect.macros.blackbox
 
-object assert {
+/** Scaladoc information for internal verification statement macros
+  * that are used in objects assert, assume and cover.
+  *
+  * @groupdesc VerifPrintMacros
+  *
+  * <p>
+  * '''These internal methods are not part of the public-facing API!'''
+  * </p>
+  * <br>
+  *
+  * @groupprio VerifPrintMacros 1001
+  */
+trait VerifPrintMacrosDoc
 
-  /** Checks for a condition to be valid in the circuit at all times. If the
-    * condition evaluates to false, the circuit simulation stops with an error.
-    *
-    * Does not fire when in reset (defined as the encapsulating Module's
-    * reset). If your definition of reset is not the encapsulating Module's
-    * reset, you will need to gate this externally.
-    *
-    * May be called outside of a Module (like defined in a function), so
-    * functions using assert make the standard Module assumptions (single clock
-    * and single reset).
+object assert extends VerifPrintMacrosDoc {
+
+  /** Checks for a condition to be valid in the circuit at rising clock edge
+    * when not in reset. If the condition evaluates to false, the circuit
+    * simulation stops with an error.
     *
     * @param cond condition, assertion fires (simulation fails) when false
     * @param message optional format string to print when the assertion fires
@@ -41,9 +49,62 @@ object assert {
   )(
     implicit sourceInfo: SourceInfo,
     compileOptions:      CompileOptions
-  ): Assert = macro _applyMacroWithMessage
+  ): Assert = macro _applyMacroWithInterpolatorCheck
+
+  /** Checks for a condition to be valid in the circuit at all times. If the
+    * condition evaluates to false, the circuit simulation stops with an error.
+    *
+    * Does not fire when in reset (defined as the current implicit reset, e.g. as set by
+    * the enclosing `withReset` or Module.reset.
+    *
+    * May be called outside of a Module (like defined in a function), so
+    * functions using assert make the standard Module assumptions (single clock
+    * and single reset).
+    *
+    * @param cond condition, assertion fires (simulation fails) on a rising clock edge when false and reset is not asserted
+    * @param message optional chisel Printable type message
+    *
+    * @note See [[printf.apply(fmt:Printable)]] for documentation on printf using Printables
+    * @note currently cannot be used in core Chisel / libraries because macro
+    * defs need to be compiled first and the SBT project is not set up to do
+    * that
+    */
+  def apply(
+    cond:    Bool,
+    message: Printable
+  )(
+    implicit sourceInfo: SourceInfo,
+    compileOptions:      CompileOptions
+  ): Assert = macro _applyMacroWithPrintableMessage
+
   def apply(cond: Bool)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Assert =
     macro _applyMacroWithNoMessage
+
+  import VerificationStatement._
+
+  /** @group VerifPrintMacros */
+  def _applyMacroWithInterpolatorCheck(
+    c:              blackbox.Context
+  )(cond:           c.Tree,
+    message:        c.Tree,
+    data:           c.Tree*
+  )(sourceInfo:     c.Tree,
+    compileOptions: c.Tree
+  ): c.Tree = {
+    import c.universe._
+    message match {
+      case q"scala.StringContext.apply(..$_).s(..$_)" =>
+        c.error(
+          c.enclosingPosition,
+          "The s-interpolator prints the Scala .toString of Data objects rather than the value " +
+            "of the hardware wire during simulation. Use the cf-interpolator instead. If you want " +
+            "an elaboration time check, call assert with a Boolean condition."
+        )
+      case _ =>
+    }
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
+    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some(_root_.chisel3.Printable.pack($message, ..$data)))($sourceInfo, $compileOptions)"
+  }
 
   /** An elaboration-time assertion. Calls the built-in Scala assert function. */
   def apply(cond: Boolean, message: => String): Unit = Predef.assert(cond, message)
@@ -54,9 +115,8 @@ object assert {
   /** Named class for assertions. */
   final class Assert private[chisel3] () extends VerificationStatement
 
-  import VerificationStatement._
-
-  def _applyMacroWithMessage(
+  /** @group VerifPrintMacros */
+  def _applyMacroWithStringMessage(
     c:              blackbox.Context
   )(cond:           c.Tree,
     message:        c.Tree,
@@ -65,10 +125,24 @@ object assert {
     compileOptions: c.Tree
   ): c.Tree = {
     import c.universe._
-    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLine"))
-    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some($message), ..$data)($sourceInfo, $compileOptions)"
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
+    q"$apply_impl_do($cond, ${getLine(c)},_root_.scala.Some(_root_.chisel3.Printable.pack($message,..$data)))($sourceInfo, $compileOptions)"
   }
 
+  /** @group VerifPrintMacros */
+  def _applyMacroWithPrintableMessage(
+    c:              blackbox.Context
+  )(cond:           c.Tree,
+    message:        c.Tree
+  )(sourceInfo:     c.Tree,
+    compileOptions: c.Tree
+  ): c.Tree = {
+    import c.universe._
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
+    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some($message))($sourceInfo, $compileOptions)"
+  }
+
+  /** @group VerifPrintMacros */
   def _applyMacroWithNoMessage(
     c:              blackbox.Context
   )(cond:           c.Tree
@@ -76,11 +150,14 @@ object assert {
     compileOptions: c.Tree
   ): c.Tree = {
     import c.universe._
-    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLine"))
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
     q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.None)($sourceInfo, $compileOptions)"
   }
 
-  /** Used by our macros. Do not call directly! */
+  /** This will be removed in Chisel 3.6 in favor of the Printable version
+    *
+    * @group VerifPrintMacros
+    */
   def _applyWithSourceLine(
     cond:    Bool,
     line:    SourceLineInfo,
@@ -91,15 +168,33 @@ object assert {
     compileOptions:      CompileOptions
   ): Assert = {
     val id = new Assert()
-    when(!Module.reset.asBool()) {
-      failureMessage("Assertion", line, cond, message, data)
+    when(!Module.reset.asBool) {
+      failureMessage("Assertion", line, cond, message.map(Printable.pack(_, data: _*)))
+      Builder.pushCommand(Verification(id, Formal.Assert, sourceInfo, Module.clock.ref, cond.ref, ""))
+    }
+    id
+  }
+
+  /** @group VerifPrintMacros */
+  def _applyWithSourceLinePrintable(
+    cond:    Bool,
+    line:    SourceLineInfo,
+    message: Option[Printable]
+  )(
+    implicit sourceInfo: SourceInfo,
+    compileOptions:      CompileOptions
+  ): Assert = {
+    val id = new Assert()
+    message.foreach(Printable.checkScope(_))
+    when(!Module.reset.asBool) {
+      failureMessage("Assertion", line, cond, message)
       Builder.pushCommand(Verification(id, Formal.Assert, sourceInfo, Module.clock.ref, cond.ref, ""))
     }
     id
   }
 }
 
-object assume {
+object assume extends VerifPrintMacrosDoc {
 
   /** Assumes a condition to be valid in the circuit at all times.
     * Acts like an assertion in simulation and imposes a declarative
@@ -127,7 +222,33 @@ object assume {
   )(
     implicit sourceInfo: SourceInfo,
     compileOptions:      CompileOptions
-  ): Assume = macro _applyMacroWithMessage
+  ): Assume = macro _applyMacroWithInterpolatorCheck
+
+  /** Assumes a condition to be valid in the circuit at all times.
+    * Acts like an assertion in simulation and imposes a declarative
+    * assumption on the state explored by formal tools.
+    *
+    * Does not fire when in reset (defined as the encapsulating Module's
+    * reset). If your definition of reset is not the encapsulating Module's
+    * reset, you will need to gate this externally.
+    *
+    * May be called outside of a Module (like defined in a function), so
+    * functions using assert make the standard Module assumptions (single clock
+    * and single reset).
+    *
+    * @param cond condition, assertion fires (simulation fails) when false
+    * @param message optional Printable type message when the assertion fires
+    *
+    * @note See [[printf.apply(fmt:Printable]] for documentation on printf using Printables
+    */
+  def apply(
+    cond:    Bool,
+    message: Printable
+  )(
+    implicit sourceInfo: SourceInfo,
+    compileOptions:      CompileOptions
+  ): Assume = macro _applyMacroWithPrintableMessage
+
   def apply(cond: Bool)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Assume =
     macro _applyMacroWithNoMessage
 
@@ -142,7 +263,8 @@ object assume {
 
   import VerificationStatement._
 
-  def _applyMacroWithMessage(
+  /** @group VerifPrintMacros */
+  def _applyMacroWithInterpolatorCheck(
     c:              blackbox.Context
   )(cond:           c.Tree,
     message:        c.Tree,
@@ -151,10 +273,48 @@ object assume {
     compileOptions: c.Tree
   ): c.Tree = {
     import c.universe._
-    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLine"))
-    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some($message), ..$data)($sourceInfo, $compileOptions)"
+    message match {
+      case q"scala.StringContext.apply(..$_).s(..$_)" =>
+        c.error(
+          c.enclosingPosition,
+          "The s-interpolator prints the Scala .toString of Data objects rather than the value " +
+            "of the hardware wire during simulation. Use the cf-interpolator instead. If you want " +
+            "an elaboration time check, call assert with a Boolean condition."
+        )
+      case _ =>
+    }
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
+    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some(_root_.chisel3.Printable.pack($message, ..$data)))($sourceInfo, $compileOptions)"
   }
 
+  /** @group VerifPrintMacros */
+  def _applyMacroWithStringMessage(
+    c:              blackbox.Context
+  )(cond:           c.Tree,
+    message:        c.Tree,
+    data:           c.Tree*
+  )(sourceInfo:     c.Tree,
+    compileOptions: c.Tree
+  ): c.Tree = {
+    import c.universe._
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
+    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some(_root_.chisel3.Printable.pack($message, ..$data)))($sourceInfo, $compileOptions)"
+  }
+
+  /** @group VerifPrintMacros */
+  def _applyMacroWithPrintableMessage(
+    c:              blackbox.Context
+  )(cond:           c.Tree,
+    message:        c.Tree
+  )(sourceInfo:     c.Tree,
+    compileOptions: c.Tree
+  ): c.Tree = {
+    import c.universe._
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
+    q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some($message))($sourceInfo, $compileOptions)"
+  }
+
+  /** @group VerifPrintMacros */
   def _applyMacroWithNoMessage(
     c:              blackbox.Context
   )(cond:           c.Tree
@@ -162,11 +322,14 @@ object assume {
     compileOptions: c.Tree
   ): c.Tree = {
     import c.universe._
-    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLine"))
+    val apply_impl_do = symbolOf[this.type].asClass.module.info.member(TermName("_applyWithSourceLinePrintable"))
     q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.None)($sourceInfo, $compileOptions)"
   }
 
-  /** Used by our macros. Do not call directly! */
+  /** This will be removed in Chisel 3.6 in favor of the Printable version
+    *
+    * @group VerifPrintMacros
+    */
   def _applyWithSourceLine(
     cond:    Bool,
     line:    SourceLineInfo,
@@ -177,15 +340,33 @@ object assume {
     compileOptions:      CompileOptions
   ): Assume = {
     val id = new Assume()
-    when(!Module.reset.asBool()) {
-      failureMessage("Assumption", line, cond, message, data)
+    when(!Module.reset.asBool) {
+      failureMessage("Assumption", line, cond, message.map(Printable.pack(_, data: _*)))
+      Builder.pushCommand(Verification(id, Formal.Assume, sourceInfo, Module.clock.ref, cond.ref, ""))
+    }
+    id
+  }
+
+  /** @group VerifPrintMacros */
+  def _applyWithSourceLinePrintable(
+    cond:    Bool,
+    line:    SourceLineInfo,
+    message: Option[Printable]
+  )(
+    implicit sourceInfo: SourceInfo,
+    compileOptions:      CompileOptions
+  ): Assume = {
+    val id = new Assume()
+    message.foreach(Printable.checkScope(_))
+    when(!Module.reset.asBool) {
+      failureMessage("Assumption", line, cond, message)
       Builder.pushCommand(Verification(id, Formal.Assume, sourceInfo, Module.clock.ref, cond.ref, ""))
     }
     id
   }
 }
 
-object cover {
+object cover extends VerifPrintMacrosDoc {
 
   /** Declares a condition to be covered.
     * At ever clock event, a counter is incremented iff the condition is active
@@ -213,6 +394,7 @@ object cover {
 
   import VerificationStatement._
 
+  /** @group VerifPrintMacros */
   def _applyMacroWithNoMessage(
     c:              blackbox.Context
   )(cond:           c.Tree
@@ -224,6 +406,7 @@ object cover {
     q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.None)($sourceInfo, $compileOptions)"
   }
 
+  /** @group VerifPrintMacros */
   def _applyMacroWithMessage(
     c:              blackbox.Context
   )(cond:           c.Tree,
@@ -236,7 +419,7 @@ object cover {
     q"$apply_impl_do($cond, ${getLine(c)}, _root_.scala.Some($message))($sourceInfo, $compileOptions)"
   }
 
-  /** Used by our macros. Do not call directly! */
+  /** @group VerifPrintMacros */
   def _applyWithSourceLine(
     cond:    Bool,
     line:    SourceLineInfo,
@@ -246,7 +429,7 @@ object cover {
     compileOptions:      CompileOptions
   ): Cover = {
     val id = new Cover()
-    when(!Module.reset.asBool()) {
+    when(!Module.reset.asBool) {
       Builder.pushCommand(Verification(id, Formal.Cover, sourceInfo, Module.clock.ref, cond.ref, ""))
     }
     id
@@ -267,19 +450,6 @@ object stop {
     stp
   }
 
-  /** Terminate execution with a failure code. */
-  @deprecated(
-    "Non-zero return codes are not well supported. Please use assert(false.B) if you want to indicate a failure.",
-    "Chisel 3.5"
-  )
-  def apply(code: Int)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Stop = {
-    val stp = new Stop()
-    when(!Module.reset.asBool) {
-      pushCommand(Stop(stp, sourceInfo, Builder.forcedClock.ref, code))
-    }
-    stp
-  }
-
   /** Named class for [[stop]]s. */
   final class Stop private[chisel3] () extends VerificationStatement
 }
@@ -296,16 +466,14 @@ private object VerificationStatement {
 
   def getLine(c: blackbox.Context): SourceLineInfo = {
     val p = c.enclosingPosition
-    (p.source.file.name, p.line, p.lineContent.trim)
+    (p.source.file.name, p.line, p.lineContent.trim): @nowarn // suppress, there's no clear replacement
   }
 
-  // creates a printf to inform the user of a failed assertion or assumption
   def failureMessage(
     kind:     String,
     lineInfo: SourceLineInfo,
     cond:     Bool,
-    message:  Option[String],
-    data:     Seq[Bits]
+    message:  Option[Printable]
   )(
     implicit sourceInfo: SourceInfo,
     compileOptions:      CompileOptions
@@ -314,11 +482,11 @@ private object VerificationStatement {
     val lineMsg = s"$filename:$line $content".replaceAll("%", "%%")
     val fmt = message match {
       case Some(msg) =>
-        s"$kind failed: $msg\n    at $lineMsg\n"
-      case None => s"$kind failed\n    at $lineMsg\n"
+        p"$kind failed: $msg\n    at $lineMsg\n"
+      case None => p"$kind failed\n    at $lineMsg\n"
     }
     when(!cond) {
-      printf.printfWithoutReset(fmt, data: _*)
+      printf.printfWithoutReset(fmt)
     }
   }
 }

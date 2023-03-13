@@ -3,10 +3,10 @@
 package chiselTests.naming
 
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.aop.Select
-import chisel3.experimental.{prefix, treedump}
+import chisel3.experimental.prefix
 import chiselTests.{ChiselFlatSpec, Utils}
+import circt.stage.ChiselStage
 
 class NamePluginSpec extends ChiselFlatSpec with Utils {
   implicit val minimumScalaVersion: Int = 12
@@ -81,7 +81,7 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
         val x4 = printf("foo = %d\n", foo)
       }
     }
-    val chirrtl = ChiselStage.emitChirrtl(new Test)
+    val chirrtl = ChiselStage.emitCHIRRTL(new Test)
     (chirrtl should include).regex("assert.*: x1")
     (chirrtl should include).regex("cover.*: x2")
     (chirrtl should include).regex("assume.*: x3")
@@ -338,6 +338,25 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
 
     aspectTest(() => new Test) { top: Test =>
       Select.wires(top).map(_.instanceName) should be(List("a_b_c", "a_b", "a"))
+    }
+  }
+
+  behavior.of("Unnamed values (aka \"Temporaries\")")
+
+  they should "be declared by starting the name with '_'" in {
+    class Test extends Module {
+      {
+        val a = {
+          val b = {
+            val _c = Wire(UInt(3.W))
+            4.U // literal so there is no name
+          }
+          b
+        }
+      }
+    }
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("_a_b_c"))
     }
   }
 }

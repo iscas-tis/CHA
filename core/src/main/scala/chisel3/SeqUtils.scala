@@ -2,8 +2,8 @@
 
 package chisel3
 
-import chisel3.experimental.FixedPoint
-import chisel3.internal.{prefix, throwException}
+import chisel3.experimental.{prefix, FixedPoint, SourceInfo}
+import chisel3.internal.throwException
 
 import scala.language.experimental.macros
 import chisel3.internal.sourceinfo._
@@ -64,7 +64,10 @@ private[chisel3] object SeqUtils {
     if (in.size == 1) {
       in.head._2
     } else {
-      Mux(in.head._1, in.head._2, priorityMux(in.tail))
+      val r = in.view.reverse
+      r.tail.foldLeft(r.head._2) {
+        case (alt, (sel, elt)) => Mux(sel, elt, alt)
+      }
     }
   }
 

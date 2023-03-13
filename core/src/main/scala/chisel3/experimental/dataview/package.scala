@@ -4,14 +4,13 @@ package chisel3.experimental
 
 import chisel3._
 import chisel3.internal._
-import chisel3.internal.sourceinfo.SourceInfo
 
 import scala.annotation.{implicitNotFound, tailrec}
 import scala.collection.mutable
 import scala.collection.immutable.LazyList // Needed for 2.12 alias
 
 package object dataview {
-  case class InvalidViewException(message: String) extends ChiselException(message)
+  case class InvalidViewException(message: String) extends chisel3.ChiselException(message)
 
   /** Provides `viewAs` for types that have an implementation of [[DataProduct]]
     *
@@ -33,34 +32,17 @@ package object dataview {
       // The names of views do not matter except for when a view is annotated. For Views that correspond
       // To a single Data, we just forward the name of the Target. For Views that correspond to more
       // than one Data, we return this assigned name but rename it in the Convert stage
-      result.forceName(None, "view", Builder.viewNamespace)
+      result.forceName("view", Builder.viewNamespace)
       result
     }
   }
-
-  // This private type alias lets us provide a custom error message for misuing the .viewAs for upcasting Bundles
-  @implicitNotFound(
-    "${A} is not a subtype of ${B}! Did you mean .viewAs[${B}]? " +
-      "Please see https://www.chisel-lang.org/chisel3/docs/cookbooks/dataview"
-  )
-  private type SubTypeOf[A, B] = A <:< B
 
   /** Provides `viewAsSupertype` for subclasses of [[Bundle]] */
   implicit class BundleUpcastable[T <: Bundle](target: T) {
 
     /** View a [[Bundle]] or [[Record]] as a parent type (upcast) */
-    def viewAsSupertype[V <: Bundle](proto: V)(implicit ev: SubTypeOf[T, V], sourceInfo: SourceInfo): V = {
-      implicit val dataView = PartialDataView.mapping[T, V](
-        _ => proto,
-        {
-          case (a, b) =>
-            val aElts = a.elements
-            val bElts = b.elements
-            val bKeys = bElts.keySet
-            val keys = aElts.keysIterator.filter(bKeys.contains)
-            keys.map(k => aElts(k) -> bElts(k)).toSeq
-        }
-      )
+    def viewAsSupertype[V <: Bundle](proto: V)(implicit ev: ChiselSubtypeOf[T, V], sourceInfo: SourceInfo): V = {
+      implicit val dataView = PartialDataView.supertype[T, V](_ => proto)
       target.viewAs[V]
     }
   }
