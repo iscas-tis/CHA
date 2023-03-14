@@ -7,6 +7,7 @@ import chiseltest.formal._
 import chiseltest.formal.svaSeq._
 import chisel3.experimental.{ChiselAnnotation,annotate,RunFirrtlTransform}
 import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target,MultiTargetAnnotation}
+import scala.language.reflectiveCalls
 
 class Counter(width: Int) extends Module {
   val io = IO(new Bundle {
@@ -68,7 +69,8 @@ class Counter(width: Int) extends Module {
   
   val bs = countReg(0)
   val ts = countReg(3)
-  svaAssert(this,"bs |-> ##[0:8] ts") 
+  assert(countReg(0))
+  // svaAssert(this,"bs |-> ##[0:8] ts") 
   // svaSeqAnno.makeSVAAnno(this,this.reset,"countReg")
 
   // svaSeqAnno.makeSVAAnno(this,this.reset,"countReg(0)")
