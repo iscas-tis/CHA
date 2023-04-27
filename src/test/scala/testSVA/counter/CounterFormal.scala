@@ -2,6 +2,7 @@ package counter
 
 import chisel3._
 import chiseltest.formal._
+import chiseltest.formal.svaSeq._
 import chisel3.experimental.{ChiselAnnotation,annotate}
 import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target}
 
@@ -18,6 +19,8 @@ class CounterProp1(width: Int) extends Module {
   //val comp2 = Module(new Counter(width))
   //val comp3 = Module(new Counter(width))
   
+  val comp1_ts = comp1.ts
+  // svaAssert(this,"comp1_ts |-> ##[1:8] comp1_ts")
   //assert(countReg === past((countReg + 1.U)(width - 1, 0),1))
   
   //cross-instance?

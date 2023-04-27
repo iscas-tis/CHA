@@ -7,6 +7,7 @@ import chiseltest.formal._
 import chisel3._
 
 class CounterFormalSpec extends AnyFlatSpec with ChiselScalatestTester with Formal {
+  // println(new (chisel3.stage.ChiselStage).emitSystemVerilog(new CounterProp1(4)))
   behavior of "CounterProp"
   it should "pass" in {
     verify(new CounterProp1(4), Seq(BoundedCheck(100), BtormcEngineAnnotation))
