@@ -4,7 +4,7 @@
 // import chisel3._
 // import chiseltest._
 // import chiseltest.formal._
-// import chiseltest.formal.svaSeq._
+// import chiseltest.formal.svaAnno._
 // import chisel3.experimental.{ChiselAnnotation,annotate,RunFirrtlTransform}
 // import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target,MultiTargetAnnotation}
 // import scala.language.reflectiveCalls
@@ -31,7 +31,7 @@
 //   // val nname = "countReg"
 
 //   // def getTypeTag[T: ru.TypeTag](obj: T) = ru.typeTag[T]
-//   // svaSeqAnno.makeSVAAnno(this,getTypeTag(this),nname,this.reset)
+//   // svaAnno.makeSVAAnno(this,getTypeTag(this),nname,this.reset)
 
 //   // val m = ru.runtimeMirror(this.getClass.getClassLoader)
 //   //       val t = ru.typeOf(getTypeTag(this)).decl(ru.TermName(nname)).asTerm
@@ -44,7 +44,7 @@
 //   //     // Conversion to FIRRTL Annotation 
 //   //       override def toFirrtl: Annotation = 
 //   //       {
-//   //         new svaSeqAnno(Seq(Seq(AtmPropAnno(hh.toTarget)):+Seq(ResetAnno(this.reset.toTarget))))
+//   //         new svaAnno(Seq(Seq(AtmPropAnno(hh.toTarget)):+Seq(ResetAnno(this.reset.toTarget))))
 //   //       }
 //   //     })
 
@@ -72,42 +72,42 @@
 //   assert(countReg(0))
 //   svaAssert(this,"bs |-> ##[0:8] ts") 
 //   svaAssert(this, "G (bs ##[1:$] ts)[*2:3] U (X (bs |-> F ts))")
-//   // svaSeqAnno.makeSVAAnno(this,this.reset,"countReg")
+//   // svaAnno.makeSVAAnno(this,this.reset,"countReg")
 
-//   // svaSeqAnno.makeSVAAnno(this,this.reset,"countReg(0)")
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(2,3) (ap(countReg(1)) ###(1,-1) ap(countReg(1)))*(2,3))
-//   // svaSeqAnno.makeSVAAnno(this.reset, countReg(0) ###(1,-1) countReg(1))
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) )
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) )
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) *(2,3))
-//   // svaSeqAnno.makeSVAAnno(this.reset,G ap(countReg(0)) ###(1,-1) *(2,3))
-//   // svaSeqAnno.makeSVAAnno(this.reset,G ap(countReg(0)) ###(1,-1) *(2,3) U X ap(countReg(0)) ###(1,-1) |-> F ap(countReg(2)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) |-> F ap(countReg(2)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0)) U ap(countReg(1)) U ap(countReg(0)) )
+//   // svaAnno.makeSVAAnno(this,this.reset,"countReg(0)")
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(2,3) (ap(countReg(1)) ###(1,-1) ap(countReg(1)))*(2,3))
+//   // svaAnno.makeSVAAnno(this.reset, countReg(0) ###(1,-1) countReg(1))
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0)) )
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) )
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) *(2,3))
+//   // svaAnno.makeSVAAnno(this.reset,G ap(countReg(0)) ###(1,-1) *(2,3))
+//   // svaAnno.makeSVAAnno(this.reset,G ap(countReg(0)) ###(1,-1) *(2,3) U X ap(countReg(0)) ###(1,-1) |-> F ap(countReg(2)))
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0)) ###(1,-1) |-> F ap(countReg(2)))
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0)) U ap(countReg(1)) U ap(countReg(0)) )
 //   // assume(reset==false)
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- ap(countReg(0)) -|)
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) -| -|)
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| ###(2,3) ap(countReg(1)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| ###(2,3) ap(countReg(1)) U X ap(countReg(2)) *(4,5) |-> G ap(countReg(2)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| U ###(2,3) ap(countReg(1)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0) & !countReg(2)) |-> ###(1,4) ap(countReg(2) ) )
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)) |-> G X ap(!countReg(0)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- ap(!countReg(0)) ###(1,-1) ap(countReg(1)) ###(2,3) *(1,-1) |->  G X ###(1,-1) ap(countReg(1)) -|)
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)) ###(2,3) *(1,-1) |-> |- G X ###(1,-1) ap(countReg(1)) -|)
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) |- ap(countReg(1)) ###(2,3) -| *(1,-1) |-> G X ap(!countReg(0)))
+//   // svaAnno.makeSVAAnno(this.reset, |- ap(countReg(0)) -|)
+//   // svaAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) -| -|)
+//   // svaAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| ###(2,3) ap(countReg(1)))
+//   // svaAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| ###(2,3) ap(countReg(1)) U X ap(countReg(2)) *(4,5) |-> G ap(countReg(2)))
+//   // svaAnno.makeSVAAnno(this.reset, |- |- ap(countReg(0)) ###(1,-1) -| *(2,3) -| U ###(2,3) ap(countReg(1)))
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0) & !countReg(2)) |-> ###(1,4) ap(countReg(2) ) )
+//   // svaAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)))
+//   // svaAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)) |-> G X ap(!countReg(0)))
+//   // svaAnno.makeSVAAnno(this.reset, |- ap(!countReg(0)) ###(1,-1) ap(countReg(1)) ###(2,3) *(1,-1) |->  G X ###(1,-1) ap(countReg(1)) -|)
+//   // svaAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) ap(countReg(1)) ###(2,3) *(1,-1) |-> |- G X ###(1,-1) ap(countReg(1)) -|)
+//   // svaAnno.makeSVAAnno(this.reset, ap(!countReg(0)) ###(1,-1) |- ap(countReg(1)) ###(2,3) -| *(1,-1) |-> G X ap(!countReg(0)))
   
-//   // svaSeqAnno.makeSVAAnno(this.reset, F |- |- ###(2, 3) ap(countReg(0)) -| *(2,3) | ap(countReg(1)) U G ap(countReg(0)) -| )
+//   // svaAnno.makeSVAAnno(this.reset, F |- |- ###(2, 3) ap(countReg(0)) -| *(2,3) | ap(countReg(1)) U G ap(countReg(0)) -| )
   
-//   // //svaSeqAnno.makeSVAAnno(this.reset, |- F  ###(2, 3) ap(countReg(0)) *(2,3) -| | ap(countReg(1))  U G ap(countReg(0)) )
+//   // //svaAnno.makeSVAAnno(this.reset, |- F  ###(2, 3) ap(countReg(0)) *(2,3) -| | ap(countReg(1))  U G ap(countReg(0)) )
   
-//   // svaSeqAnno.makeSVAAnno(this.reset, G |- ###(2, 3) ###(2, 3) ap(countReg(0)) && G ap(countReg(0)) -|)
-//   // svaSeqAnno.makeSVAAnno(this.reset, F |- |- ###(2, 3) ap(countReg(0)) -| *(2,3) | ap(countReg(1)) U G ap(countReg(0)) -| )
-//   // svaSeqAnno.makeSVAAnno(this.reset, ap(countReg(0))) 
+//   // svaAnno.makeSVAAnno(this.reset, G |- ###(2, 3) ###(2, 3) ap(countReg(0)) && G ap(countReg(0)) -|)
+//   // svaAnno.makeSVAAnno(this.reset, F |- |- ###(2, 3) ap(countReg(0)) -| *(2,3) | ap(countReg(1)) U G ap(countReg(0)) -| )
+//   // svaAnno.makeSVAAnno(this.reset, ap(countReg(0))) 
 //   // printlnTSeq(###(2, 3) ###(2, 3) ap(countReg(0)) ###(2, 3) ap(countReg(0)) |-> ap(countReg(1)) |-> G F ap(countReg(0)) )
 //   // makeSVAAnno(Seq(FinalOp(), Leftbraket(), Leftbraket(), NextOp(), GlobalOp(), AtmProp(countReg(0))))
-//   // svaSeqAnno.makeSVAAnno(this.reset,! ap(countReg(0)) |-> F ! G ap(countReg(0)))
-//   // svaSeqAnno.makeSVAAnno(this.reset, |- ap(!countReg(0)) -|)
+//   // svaAnno.makeSVAAnno(this.reset,! ap(countReg(0)) |-> F ! G ap(countReg(0)))
+//   // svaAnno.makeSVAAnno(this.reset, |- ap(!countReg(0)) -|)
 //   io.dout := countReg
 //   // assert(countReg(0))
 //   // DoPrim(not,List(Reference(reset,UIntType(IntWidth(1)),PortKind,SourceFlow)),List(),UIntType(IntWidth(1))), StringLit(), assert_)

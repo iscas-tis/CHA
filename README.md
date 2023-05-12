@@ -131,7 +131,7 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
 
    ```scala
    class DecoupledGcdProp1(width: Int) extends DecoupledGcd(width: Int){
-     svaSeqAnno.makeSVAAnno(this.reset, ap(busy) |->  ###(1,15) ap(!busy))
+     svaAnno.makeSVAAnno(this.reset, ap(busy) |->  ###(1,15) ap(!busy))
    }
    ```
 

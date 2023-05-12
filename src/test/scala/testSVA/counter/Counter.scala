@@ -4,7 +4,7 @@ import scala.reflect.runtime.{universe => ru}
 import chisel3._
 import chiseltest._
 import chiseltest.formal._
-import chiseltest.formal.svaSeq._
+import chiseltest.formal.svaAnno._
 import chisel3.experimental.{ChiselAnnotation,annotate,RunFirrtlTransform}
 import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target,MultiTargetAnnotation}
 import scala.language.reflectiveCalls
@@ -21,6 +21,7 @@ class Counter(width: Int) extends Module {
   val bs = countReg(0)
   val ts = countReg(3)
   // assert(countReg(0))
+  // svaAssume(this,"G bs")
   svaAssert(this,"bs |-> ##[0:8] ts") 
   // svaAssert(this, "G (bs ##[1:$] ts)[*2:3] U (X (bs |-> F ts))")
   io.dout := countReg

@@ -7,7 +7,7 @@ import chiseltest._
 import chiseltest.formal._
 import chisel3._
 import org.scalatest.freespec._
-import chiseltest.formal.svaSeq._
+import chiseltest.formal.svaAnno._
 
  // necessary to import
 

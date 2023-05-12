@@ -2,7 +2,7 @@ package counter
 
 import chisel3._
 import chiseltest.formal._
-import chiseltest.formal.svaSeq._
+import chiseltest.formal.svaAnno._
 import chisel3.experimental.{ChiselAnnotation,annotate}
 import firrtl.annotations.{Annotation, ReferenceTarget, SingleTargetAnnotation, Target}
 
