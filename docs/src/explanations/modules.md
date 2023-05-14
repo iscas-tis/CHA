@@ -92,12 +92,6 @@ Note: Chisel `Module`s have an implicit clock (called `clock`) and
 an implicit reset (called `reset`). To create modules without implicit
 clock and reset, Chisel provides `RawModule`.
 
-> Historical Note: Prior to Chisel 3.5, Modules were restricted to only
-having a single user-defined port named `io`. There was also a type called
-`MultiIOModule` that provided implicit clock and reset while allowing the
-user to define as many ports as they want. This is now the functionality
-of `Module`.
-
 ### `RawModule`
 
 A `RawModule` is a module that **does not provide an implicit clock and reset.**
@@ -132,7 +126,7 @@ class FooWrapper extends RawModule {
 In the example above, the `RawModule` is used to change the reset polarity
 of module `SlaveSpi`. Indeed, the reset is active high by default in Chisel
 modules, then using `withClockAndReset(clock, !rstn)` we can use an active low
-reset in entire design.
+reset in the entire design.
 
-The clock is just wired as it, but if needed, `RawModule` can be used in
+The clock is just wired as is, but if needed, `RawModule` can be used in
 conjunction with `BlackBox` to connect a differential clock input for example.

@@ -13,7 +13,7 @@ import chisel3._
   *
   * $seedExplanation
   *
-  * In the example below, a 4-bit LFSR Fibonacci LFSR is constructed. The tap points are defined as four and three
+  * In the example below, a 4-bit LFSR Galois LFSR is constructed. The tap points are defined as four and three
   * (using LFSR convention of indexing from one). This results in the hardware configuration shown in the diagram.
   *
   * {{{
@@ -38,21 +38,21 @@ import chisel3._
   * $paramUpdateSeed
   */
 class GaloisLFSR(
-  width: Int,
-  taps: Set[Int],
-  seed: Option[BigInt] = Some(1),
+  width:         Int,
+  taps:          Set[Int],
+  seed:          Option[BigInt] = Some(1),
   val reduction: LFSRReduce = XOR,
-  step: Int = 1,
-  updateSeed: Boolean = false) extends PRNG(width, seed, step, updateSeed) with LFSR {
+  step:          Int = 1,
+  updateSeed:    Boolean = false)
+    extends PRNG(width, seed, step, updateSeed)
+    with LFSR {
 
   def delta(s: Seq[Bool]): Seq[Bool] = {
     val first = s.head
-    (s.tail :+ first)
-      .zipWithIndex
-      .map {
-        case (a, i) if taps(i + 1) && (i + 1 != s.size) => reduction(a, first)
-        case (a, _)                                     => a
-      }
+    (s.tail :+ first).zipWithIndex.map {
+      case (a, i) if taps(i + 1) && (i + 1 != s.size) => reduction(a, first)
+      case (a, _)                                     => a
+    }
   }
 
 }
@@ -85,7 +85,7 @@ class MaxPeriodGaloisLFSR(width: Int, seed: Option[BigInt] = Some(1), reduction:
   */
 object GaloisLFSR {
 
-  /** Return a pseudorandom [[UInt]] generated from a [[FibonacciLFSR]].
+  /** Return a pseudorandom [[UInt]] generated from a [[GaloisLFSR]].
     * $paramWidth
     * $paramTaps
     * $paramIncrement
@@ -93,11 +93,12 @@ object GaloisLFSR {
     * $paramReduction
     */
   def apply(
-    width: Int,
-    taps: Set[Int],
+    width:     Int,
+    taps:      Set[Int],
     increment: Bool = true.B,
-    seed: Option[BigInt] = Some(1),
-    reduction: LFSRReduce = XOR): UInt = PRNG(new GaloisLFSR(width, taps, seed, reduction), increment)
+    seed:      Option[BigInt] = Some(1),
+    reduction: LFSRReduce = XOR
+  ): UInt = PRNG(new GaloisLFSR(width, taps, seed, reduction), increment)
 
   /** Return a pseudorandom [[UInt]] generated using a maximal period [[GaloisLFSR]]
     * $paramWidth
@@ -106,9 +107,10 @@ object GaloisLFSR {
     * $paramReduction
     */
   def maxPeriod(
-    width: Int,
+    width:     Int,
     increment: Bool = true.B,
-    seed: Option[BigInt] = Some(1),
-    reduction: LFSRReduce = XOR): UInt = PRNG(new MaxPeriodGaloisLFSR(width, seed, reduction), increment)
+    seed:      Option[BigInt] = Some(1),
+    reduction: LFSRReduce = XOR
+  ): UInt = PRNG(new MaxPeriodGaloisLFSR(width, seed, reduction), increment)
 
 }

@@ -5,25 +5,21 @@ package chiselTests
 import chisel3._
 import chisel3.testers.BasicTester
 import chisel3.util._
-import org.scalacheck.Shrink
 
-class Complex[T <: Data](val re: T, val im: T) extends Bundle {
-  override def cloneType: this.type =
-    new Complex(re.cloneType, im.cloneType).asInstanceOf[this.type]
-}
+class Complex[T <: Data](val re: T, val im: T) extends Bundle
 
 class ComplexAssign(w: Int) extends Module {
   val io = IO(new Bundle {
-    val e   = Input(Bool())
-    val in  = Input(new Complex(UInt(w.W), UInt(w.W)))
+    val e = Input(Bool())
+    val in = Input(new Complex(UInt(w.W), UInt(w.W)))
     val out = Output(new Complex(UInt(w.W), UInt(w.W)))
   })
-  when (io.e) {
+  when(io.e) {
     val tmp = Wire(new Complex(UInt(w.W), UInt(w.W)))
     tmp := io.in
     io.out.re := tmp.re
     io.out.im := tmp.im
-  } .otherwise {
+  }.otherwise {
     io.out.re := 0.U
     io.out.im := 0.U
   }
@@ -45,11 +41,8 @@ class ComplexAssignTester(enList: List[Boolean], re: Int, im: Int) extends Basic
 
 class ComplexAssignSpec extends ChiselPropSpec {
   property("All complex assignments should return the correct result") {
-    // Disable shrinking on error.
-    implicit val noShrinkListVal = Shrink[List[Boolean]](_ => Stream.empty)
-    implicit val noShrinkInt = Shrink[Int](_ => Stream.empty)
     forAll(enSequence(2), safeUInts, safeUInts) { (en: List[Boolean], re: Int, im: Int) =>
-      assertTesterPasses{ new ComplexAssignTester(en, re, im) }
+      assertTesterPasses { new ComplexAssignTester(en, re, im) }
     }
   }
 }

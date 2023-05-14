@@ -3,23 +3,21 @@
 package chiselTests
 
 import chisel3._
-import chisel3.experimental.{DataMirror, FixedPoint, ChiselEnum}
+import chisel3.reflect.DataMirror
 import chisel3.testers.BasicTester
 
 class AsTypeOfBundleTester extends BasicTester {
   class MultiTypeBundle extends Bundle {
-    val u  = UInt(4.W)
-    val s  = SInt(4.W)
-    val fp = FixedPoint(4.W, 3.BP)
+    val u = UInt(4.W)
+    val s = SInt(4.W)
   }
 
   val bun = new MultiTypeBundle
 
-  val bunAsTypeOf = ((4 << 8) + (15 << 4) + (12 << 0)).U.asTypeOf(bun)
+  val bunAsTypeOf = ((4 << 4) + (15 << 0)).U.asTypeOf(bun)
 
   assert(bunAsTypeOf.u === 4.U)
   assert(bunAsTypeOf.s === -1.S)
-  assert(bunAsTypeOf.fp === FixedPoint.fromDouble(-0.5, 4.W, 3.BP))
 
   stop()
 }
@@ -55,12 +53,12 @@ class AsTypeOfVecTester extends BasicTester {
 
 class AsTypeOfTruncationTester extends BasicTester {
   val truncate = (64 + 3).U.asTypeOf(UInt(3.W))
-  val expand   = 1.U.asTypeOf(UInt(3.W))
+  val expand = 1.U.asTypeOf(UInt(3.W))
 
-  assert( DataMirror.widthOf(truncate).get == 3 )
-  assert( truncate === 3.U )
-  assert( DataMirror.widthOf(expand).get == 3 )
-  assert( expand === 1.U )
+  assert(DataMirror.widthOf(truncate).get == 3)
+  assert(truncate === 3.U)
+  assert(DataMirror.widthOf(expand).get == 3)
+  assert(expand === 1.U)
 
   stop()
 }
@@ -107,42 +105,42 @@ class AsChiselEnumTester extends BasicTester {
 
   // In aggregate
   class OtherBundle extends Bundle {
-    val enum = MyEnum()
+    val myEnum = MyEnum()
     val foo = Bool()
   }
   val wire = Wire(new OtherBundle)
-  wire.enum := MyEnum.fizz
+  wire.myEnum := MyEnum.fizz
   wire.foo := true.B
 
   assert(wire.asUInt === 5.U)
   val other = 5.U.asTypeOf(new OtherBundle)
-  assert(other.enum === MyEnum.fizz)
+  assert(other.myEnum === MyEnum.fizz)
   assert(other.foo === true.B)
 
   stop()
 }
 
 class AsTypeOfSpec extends ChiselFlatSpec {
-  behavior of "asTypeOf"
+  behavior.of("asTypeOf")
 
   it should "work with Bundles containing Bits Types" in {
-    assertTesterPasses{ new AsTypeOfBundleTester }
+    assertTesterPasses { new AsTypeOfBundleTester }
   }
 
   it should "work with Bundles that have fields of zero width" in {
-    assertTesterPasses{ new AsTypeOfBundleZeroWidthTester }
+    assertTesterPasses { new AsTypeOfBundleZeroWidthTester }
   }
 
   it should "work with Vecs containing Bits Types" in {
-    assertTesterPasses{ new AsTypeOfVecTester }
+    assertTesterPasses { new AsTypeOfVecTester }
   }
 
   it should "expand and truncate UInts of different width" in {
-    assertTesterPasses{ new AsTypeOfTruncationTester }
+    assertTesterPasses { new AsTypeOfTruncationTester }
   }
 
   it should "work for casting implicit Reset to Bool" in {
-    assertTesterPasses{ new ResetAsTypeOfBoolTester  }
+    assertTesterPasses { new ResetAsTypeOfBoolTester }
   }
 
   it should "work for casting to and from ChiselEnums" in {

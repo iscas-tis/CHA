@@ -31,7 +31,7 @@ object pla {
     * This behavior is formally described as: if product terms that make one function value to `1` is solely consisted
     * of don't-cares (`?`s), then this function is implemented as a constant `1`.
     *
-    * @param table A [[Seq]] of inputs -> outputs mapping
+    * @param table A `Seq` of inputs -> outputs mapping
     * @param invert A [[BitPat]] specify which bit of the output should be inverted. `1` means the correspond position
     *               of the output should be inverted in the PLA, a `0` or a `?` means direct output from the OR matrix.
     * @return the (input, output) [[Wire]] of [[UInt]] of the constructed pla.
@@ -68,7 +68,8 @@ object pla {
 
     val inverterMask = invert.value & invert.mask
     if (inverterMask.bitCount != 0)
-      require(invert.getWidth == numberOfOutputs,
+      require(
+        invert.getWidth == numberOfOutputs,
         "non-zero inverter mask must have the same width as the output part of specified PLA table"
       )
 
@@ -94,33 +95,33 @@ object pla {
           }
         }
         .flatten
-      if (andMatrixInput.nonEmpty) t.toString -> Cat(andMatrixInput).andR() else t.toString -> true.B
+      if (andMatrixInput.nonEmpty) t.toString -> Cat(andMatrixInput).andR else t.toString -> true.B
     }.toMap
 
     // the OR matrix
     val orMatrixOutputs: UInt = Cat(
-        Seq
-          .tabulate(numberOfOutputs) { i =>
-            val andMatrixLines = table
-              // OR matrix composed by input terms which makes this output bit a `1`
-              .filter {
-                case (_, or) => or.mask.testBit(i) && or.value.testBit(i)
-              }.map {
-                case (inputTerm, _) =>
-                  andMatrixOutputs(inputTerm.toString)
-              }
-            if (andMatrixLines.isEmpty) false.B
-            else Cat(andMatrixLines).orR()
-          }
-          .reverse
-      )
+      Seq
+        .tabulate(numberOfOutputs) { i =>
+          val andMatrixLines = table
+            // OR matrix composed by input terms which makes this output bit a `1`
+            .filter {
+              case (_, or) => or.mask.testBit(i) && or.value.testBit(i)
+            }.map {
+              case (inputTerm, _) =>
+                andMatrixOutputs(inputTerm.toString)
+            }
+          if (andMatrixLines.isEmpty) false.B
+          else Cat(andMatrixLines).orR
+        }
+        .reverse
+    )
 
     // the INV matrix, useful for decoders
     val invMatrixOutputs: UInt = Cat(
       Seq
         .tabulate(numberOfOutputs) { i =>
           if (inverterMask.testBit(i)) ~orMatrixOutputs(i)
-          else                          orMatrixOutputs(i)
+          else orMatrixOutputs(i)
         }
         .reverse
     )

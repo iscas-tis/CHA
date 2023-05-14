@@ -3,8 +3,9 @@
 package chiselTests
 
 import chisel3._
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 import chisel3.util._
+import scala.collection.immutable.LazyList // Needed for 2.12 alias
 
 import scala.collection.mutable
 
@@ -31,10 +32,14 @@ class IterableNaming extends NamedModuleTester {
   val seq = Seq.tabulate(3) { i =>
     Seq.tabulate(2) { j => expectName(WireDefault((i * j).U), s"seq_${i}_${j}") }
   }
-  val optSet = Some(Set(expectName(WireDefault(0.U), "optSet_0"),
-                        expectName(WireDefault(1.U), "optSet_1"),
-                        expectName(WireDefault(2.U), "optSet_2"),
-                        expectName(WireDefault(3.U), "optSet_3")))
+  val optSet = Some(
+    Set(
+      expectName(WireDefault(0.U), "optSet_0"),
+      expectName(WireDefault(1.U), "optSet_1"),
+      expectName(WireDefault(2.U), "optSet_2"),
+      expectName(WireDefault(3.U), "optSet_3")
+    )
+  )
 
   val stack = {
     val s = mutable.Stack[Module]()
@@ -44,10 +49,14 @@ class IterableNaming extends NamedModuleTester {
     }
     s
   }
-  def streamFrom(x: Int): Stream[Module] =
-    expectName(Module(new Other(x)), s"list_$x") #:: streamFrom(x + 1)
-  val stream = streamFrom(0) // Check that we don't get into infinite loop
-  val list = stream.take(8).toList
+  // Check that we don't get into infinite loop
+  // When we still had reflective naming, we could have the list take from the Stream and have
+  // everything named list_<n>. Without reflective naming, the first element in the Stream gets a
+  // default name because it is built eagerly but the compiler plugin doesn't know how to handle
+  // infinite-size structures. Scala 2.13 LazyList would give the same old naming behavior but does
+  // not exist in Scala 2.12 so this test has been simplified a bit.
+  val stream = LazyList.continually(Module(new Other(8)))
+  val list = List.tabulate(4)(i => expectName(Module(new Other(i)), s"list_$i"))
 }
 
 class DigitFieldNamesInRecord extends NamedModuleTester {
@@ -62,7 +71,7 @@ class DigitFieldNamesInRecord extends NamedModuleTester {
  */
 class BetterNamingTests extends ChiselFlatSpec {
 
-  behavior of "Better Naming"
+  behavior.of("Better Naming")
 
   it should "provide unique counters for each name" in {
     var module: PerNameIndexing = null
@@ -77,7 +86,7 @@ class BetterNamingTests extends ChiselFlatSpec {
   }
 
   it should "allow digits to be field names in Records" in {
-    var module: DigitFieldNamesInRecord  = null
+    var module: DigitFieldNamesInRecord = null
     ChiselStage.elaborate { module = new DigitFieldNamesInRecord; module }
     assert(module.getNameFailures() == Nil)
   }
@@ -90,8 +99,8 @@ class BetterNamingTests extends ChiselFlatSpec {
       }
       WireDefault(3.U)
     }
-    val withLits = ChiselStage.emitChirrtl(new MyModule(true))
-    val noLits = ChiselStage.emitChirrtl(new MyModule(false))
-    withLits should equal (noLits)
+    val withLits = ChiselStage.emitCHIRRTL(new MyModule(true))
+    val noLits = ChiselStage.emitCHIRRTL(new MyModule(false))
+    withLits should equal(noLits)
   }
 }

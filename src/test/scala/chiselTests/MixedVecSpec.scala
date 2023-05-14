@@ -2,11 +2,10 @@
 
 package chiselTests
 
+import circt.stage.ChiselStage
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.testers.BasicTester
 import chisel3.util._
-import org.scalacheck.Shrink
 
 class MixedVecAssignTester(w: Int, values: List[Int]) extends BasicTester {
   val v = MixedVecInit(values.map(v => v.U(w.W)))
@@ -87,7 +86,7 @@ class MixedVecUIntDynamicIndexTester extends BasicTester {
   val (cycle, done) = Counter(true.B, n)
   assert(vecWire(cycle) === cycle)
 
-  when (done) { stop() }
+  when(done) { stop() }
 }
 
 class MixedVecTestBundle extends Bundle {
@@ -143,10 +142,10 @@ class MixedVecOneBitTester extends BasicTester {
   val flag = RegInit(false.B)
 
   val oneBit = Reg(MixedVec(Seq(UInt(1.W))))
-  when (!flag) {
+  when(!flag) {
     oneBit(0) := 1.U(1.W)
     flag := true.B
-  } .otherwise {
+  }.otherwise {
     assert(oneBit(0) === 1.U)
     assert(oneBit.asUInt === 1.U)
     stop()
@@ -154,11 +153,6 @@ class MixedVecOneBitTester extends BasicTester {
 }
 
 class MixedVecSpec extends ChiselPropSpec with Utils {
-  // Disable shrinking on error.
-  // Not sure why this needs to be here, but the test behaves very weirdly without it (e.g. empty Lists, etc).
-  implicit val noShrinkListVal = Shrink[List[Int]](_ => Stream.empty)
-  implicit val noShrinkInt = Shrink[Int](_ => Stream.empty)
-
   property("MixedVec varargs API should work") {
     assertTesterPasses {
       new BasicTester {
@@ -179,26 +173,29 @@ class MixedVecSpec extends ChiselPropSpec with Utils {
   }
 
   property("MixedVecs should be assignable") {
-    forAll(safeUIntN(8)) { case (w: Int, v: List[Int]) =>
-      assertTesterPasses {
-        new MixedVecAssignTester(w, v)
-      }
+    forAll(safeUIntN(8)) {
+      case (w: Int, v: List[Int]) =>
+        assertTesterPasses {
+          new MixedVecAssignTester(w, v)
+        }
     }
   }
 
   property("MixedVecs should be usable as the type for Reg()") {
-    forAll(safeUIntN(8)) { case (w: Int, v: List[Int]) =>
-      assertTesterPasses {
-        new MixedVecRegTester(w, v)
-      }
+    forAll(safeUIntN(8)) {
+      case (w: Int, v: List[Int]) =>
+        assertTesterPasses {
+          new MixedVecRegTester(w, v)
+        }
     }
   }
 
   property("MixedVecs should be passed through IO") {
-    forAll(safeUIntN(8)) { case (w: Int, v: List[Int]) =>
-      assertTesterPasses {
-        new MixedVecIOTester(v.map(i => i.U(w.W)))
-      }
+    forAll(safeUIntN(8)) {
+      case (w: Int, v: List[Int]) =>
+        assertTesterPasses {
+          new MixedVecIOTester(v.map(i => i.U(w.W)))
+        }
     }
   }
 
@@ -209,21 +206,21 @@ class MixedVecSpec extends ChiselPropSpec with Utils {
   }
 
   property("MixedVecs should not be able to take hardware types") {
-    a [ExpectedChiselTypeException] should be thrownBy extractCause[ExpectedChiselTypeException] {
+    a[ExpectedChiselTypeException] should be thrownBy extractCause[ExpectedChiselTypeException] {
       ChiselStage.elaborate(new Module {
         val io = IO(new Bundle {})
         val hw = Wire(MixedVec(Seq(UInt(8.W), Bool())))
         val illegal = MixedVec(hw)
       })
     }
-    a [ExpectedChiselTypeException] should be thrownBy extractCause[ExpectedChiselTypeException] {
+    a[ExpectedChiselTypeException] should be thrownBy extractCause[ExpectedChiselTypeException] {
       ChiselStage.elaborate(new Module {
         val io = IO(new Bundle {})
         val hw = Reg(MixedVec(Seq(UInt(8.W), Bool())))
         val illegal = MixedVec(hw)
       })
     }
-    a [ExpectedChiselTypeException] should be thrownBy extractCause[ExpectedChiselTypeException] {
+    a[ExpectedChiselTypeException] should be thrownBy extractCause[ExpectedChiselTypeException] {
       ChiselStage.elaborate(new Module {
         val io = IO(new Bundle {
           val v = Input(MixedVec(Seq(UInt(8.W), Bool())))
@@ -238,19 +235,19 @@ class MixedVecSpec extends ChiselPropSpec with Utils {
   }
 
   property("MixedVecs of UInts should be dynamically indexable (via VecInit)") {
-    assertTesterPasses{ new MixedVecUIntDynamicIndexTester }
+    assertTesterPasses { new MixedVecUIntDynamicIndexTester }
   }
 
   property("MixedVecs should be creatable from Vecs") {
-    assertTesterPasses{ new MixedVecFromVecTester }
+    assertTesterPasses { new MixedVecFromVecTester }
   }
 
   property("It should be possible to bulk connect a MixedVec and a Vec") {
-    assertTesterPasses{ new MixedVecConnectWithVecTester }
+    assertTesterPasses { new MixedVecConnectWithVecTester }
   }
 
   property("It should be possible to bulk connect a MixedVec and a Seq") {
-    assertTesterPasses{ new MixedVecConnectWithSeqTester }
+    assertTesterPasses { new MixedVecConnectWithSeqTester }
   }
 
   property("MixedVecs of a single 1 bit element should compile and work") {
@@ -258,7 +255,7 @@ class MixedVecSpec extends ChiselPropSpec with Utils {
   }
 
   property("Connecting a MixedVec and something of different size should report a ChiselException") {
-    an [IllegalArgumentException] should be thrownBy extractCause[IllegalArgumentException] {
+    an[IllegalArgumentException] should be thrownBy extractCause[IllegalArgumentException] {
       ChiselStage.elaborate(new Module {
         val io = IO(new Bundle {
           val out = Output(MixedVec(Seq(UInt(8.W), Bool())))
@@ -267,7 +264,7 @@ class MixedVecSpec extends ChiselPropSpec with Utils {
         io.out := seq
       })
     }
-    an [IllegalArgumentException] should be thrownBy extractCause[IllegalArgumentException] {
+    an[IllegalArgumentException] should be thrownBy extractCause[IllegalArgumentException] {
       ChiselStage.elaborate(new Module {
         val io = IO(new Bundle {
           val out = Output(MixedVec(Seq(UInt(8.W), Bool())))
@@ -276,5 +273,21 @@ class MixedVecSpec extends ChiselPropSpec with Utils {
         io.out := seq
       })
     }
+  }
+
+  property("MixedVec connections should emit FIRRTL bulk connects when possible") {
+    val chirrtl = ChiselStage.emitCHIRRTL(new Module {
+      val io = IO(new Bundle {
+        val inMono = Input(MixedVec(Seq(UInt(8.W), UInt(16.W), UInt(4.W), UInt(7.W))))
+        val outMono = Output(MixedVec(Seq(UInt(8.W), UInt(16.W), UInt(4.W), UInt(7.W))))
+        val inBi = Input(MixedVec(Seq(UInt(8.W), UInt(16.W), UInt(4.W), UInt(7.W))))
+        val outBi = Output(MixedVec(Seq(UInt(8.W), UInt(16.W), UInt(4.W), UInt(7.W))))
+      })
+      // Explicit upcast avoids weird issue where Scala 2.12 overloading resolution calls version of := accepting Seq[T] instead of normal Data version
+      io.outMono := (io.inMono: Data)
+      io.outBi <> io.inBi
+    })
+    chirrtl should include("io.outMono <= io.inMono")
+    chirrtl should include("io.outBi <= io.inBi")
   }
 }

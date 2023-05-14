@@ -2,17 +2,24 @@
 
 package chiselTests
 
-import org.scalacheck._
-
+import circt.stage.ChiselStage
 import chisel3._
 import chisel3.testers.BasicTester
 import chisel3.util._
 import chisel3.util.random.LFSR
+import org.scalacheck._
 
-class ThingsPassThroughTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean, hasFlush: Boolean) extends BasicTester {
+class ThingsPassThroughTester(
+  elements:       Seq[Int],
+  queueDepth:     Int,
+  bitWidth:       Int,
+  tap:            Int,
+  useSyncReadMem: Boolean,
+  hasFlush:       Boolean)
+    extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, useSyncReadMem = useSyncReadMem, hasFlush = hasFlush))
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -21,10 +28,10 @@ class ThingsPassThroughTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int
   q.io.deq.ready := LFSR(16)(tap)
   q.io.flush.foreach { _ := false.B } //Flush behavior is tested in QueueFlushSpec
   q.io.enq.bits := elems(inCnt.value)
-  when(q.io.enq.fire()) {
+  when(q.io.enq.fire) {
     inCnt.inc()
   }
-  when(q.io.deq.fire()) {
+  when(q.io.deq.fire) {
     //ensure that what comes out is what comes in
     assert(elems(outCnt.value) === q.io.deq.bits)
     outCnt.inc()
@@ -34,10 +41,11 @@ class ThingsPassThroughTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int
   }
 }
 
-class QueueReasonableReadyValid(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean) extends BasicTester {
+class QueueReasonableReadyValid(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean)
+    extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, useSyncReadMem = useSyncReadMem))
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -51,10 +59,10 @@ class QueueReasonableReadyValid(elements: Seq[Int], queueDepth: Int, bitWidth: I
   assert(q.io.deq.valid || q.io.count === 0.U)
 
   q.io.enq.bits := elems(inCnt.value)
-  when(q.io.enq.fire()) {
+  when(q.io.enq.fire) {
     inCnt.inc()
   }
-  when(q.io.deq.fire()) {
+  when(q.io.deq.fire) {
     outCnt.inc()
   }
   when(outCnt.value === elements.length.U) {
@@ -62,7 +70,8 @@ class QueueReasonableReadyValid(elements: Seq[Int], queueDepth: Int, bitWidth: I
   }
 }
 
-class CountIsCorrectTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean) extends BasicTester {
+class CountIsCorrectTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean)
+    extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, useSyncReadMem = useSyncReadMem))
   val elems = VecInit(elements.map {
     _.asUInt(bitWidth.W)
@@ -74,11 +83,11 @@ class CountIsCorrectTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, t
   q.io.deq.ready := LFSR(16)(tap)
 
   q.io.enq.bits := elems(inCnt.value)
-  when(q.io.enq.fire()) {
+  when(q.io.enq.fire) {
     inCnt.inc()
     assert(q.io.count === (inCnt.value - outCnt.value))
   }
-  when(q.io.deq.fire()) {
+  when(q.io.deq.fire) {
     outCnt.inc()
     assert(q.io.count === (inCnt.value - outCnt.value))
   }
@@ -103,10 +112,10 @@ class QueueSinglePipeTester(elements: Seq[Int], bitWidth: Int, tap: Int, useSync
   assert(q.io.enq.ready || (q.io.count === 1.U && !q.io.deq.ready))
 
   q.io.enq.bits := elems(inCnt.value)
-  when(q.io.enq.fire()) {
+  when(q.io.enq.fire) {
     inCnt.inc()
   }
-  when(q.io.deq.fire()) {
+  when(q.io.deq.fire) {
     outCnt.inc()
   }
 
@@ -115,7 +124,8 @@ class QueueSinglePipeTester(elements: Seq[Int], bitWidth: Int, tap: Int, useSync
   }
 }
 
-class QueuePipeTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean) extends BasicTester {
+class QueuePipeTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean)
+    extends BasicTester {
   val q = Module(new Queue(UInt(bitWidth.W), queueDepth, pipe = true, useSyncReadMem = useSyncReadMem))
   val elems = VecInit(elements.map {
     _.asUInt(bitWidth.W)
@@ -129,10 +139,10 @@ class QueuePipeTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: I
   assert(q.io.enq.ready || (q.io.count === queueDepth.U && !q.io.deq.ready))
 
   q.io.enq.bits := elems(inCnt.value)
-  when(q.io.enq.fire()) {
+  when(q.io.enq.fire) {
     inCnt.inc()
   }
-  when(q.io.deq.fire()) {
+  when(q.io.deq.fire) {
     outCnt.inc()
   }
 
@@ -141,10 +151,11 @@ class QueuePipeTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: I
   }
 }
 
-class QueueFlowTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean) extends BasicTester {
-  val q = Module(new Queue(UInt(bitWidth.W), queueDepth, flow = true,  useSyncReadMem = useSyncReadMem))
+class QueueFlowTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean)
+    extends BasicTester {
+  val q = Module(new Queue(UInt(bitWidth.W), queueDepth, flow = true, useSyncReadMem = useSyncReadMem))
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -155,13 +166,13 @@ class QueueFlowTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: I
 
   q.io.deq.ready := LFSR(16)(tap)
   //Queue should be empty or valid
-  assert(q.io.deq.valid || (q.io.count === 0.U && !q.io.enq.fire()))
+  assert(q.io.deq.valid || (q.io.count === 0.U && !q.io.enq.fire))
 
   q.io.enq.bits := elems(inCnt.value)
-  when(q.io.enq.fire()) {
+  when(q.io.enq.fire) {
     inCnt.inc()
   }
-  when(q.io.deq.fire()) {
+  when(q.io.deq.fire) {
     outCnt.inc()
   }
   when(outCnt.value === elements.length.U) {
@@ -169,12 +180,13 @@ class QueueFlowTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: I
   }
 }
 
-class QueueFactoryTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean) extends BasicTester {
+class QueueFactoryTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap: Int, useSyncReadMem: Boolean)
+    extends BasicTester {
   val enq = Wire(Decoupled(UInt(bitWidth.W)))
   val deq = Queue(enq, queueDepth, useSyncReadMem = useSyncReadMem)
 
   val elems = VecInit(elements.map {
-    _.asUInt()
+    _.asUInt
   })
   val inCnt = Counter(elements.length + 1)
   val outCnt = Counter(elements.length + 1)
@@ -183,10 +195,10 @@ class QueueFactoryTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap
   deq.ready := LFSR(16)(tap)
 
   enq.bits := elems(inCnt.value)
-  when(enq.fire()) {
+  when(enq.fire) {
     inCnt.inc()
   }
-  when(deq.fire()) {
+  when(deq.fire) {
     //ensure that what comes out is what comes in
     assert(elems(outCnt.value) === deq.bits)
     outCnt.inc()
@@ -197,9 +209,6 @@ class QueueFactoryTester(elements: Seq[Int], queueDepth: Int, bitWidth: Int, tap
 }
 
 class QueueSpec extends ChiselPropSpec {
-  // Disable shrinking on error.
-  implicit val noShrinkListVal = Shrink[List[Int]](_ => Stream.empty)
-  implicit val noShrinkInt = Shrink[Int](_ => Stream.empty)
 
   property("Queue should have things pass through") {
     forAll(vecSizes, safeUIntN(20), Gen.choose(0, 15), Gen.oneOf(true, false)) { (depth, se, tap, isSync) =>
@@ -276,6 +285,22 @@ class QueueSpec extends ChiselPropSpec {
       val in = Wire(Decoupled(Bool()))
       val iQueue = Queue.irrevocable(in, 1)
     }
-    (new chisel3.stage.phases.Elaborate).transform(Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new IrrevocableQueue)))
+    (new chisel3.stage.phases.Elaborate)
+      .transform(Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new IrrevocableQueue)))
+  }
+
+  property("Queue.apply should have decent names") {
+    class HasTwoQueues extends Module {
+      val in = IO(Flipped(Decoupled(UInt(8.W))))
+      val out = IO(Decoupled(UInt(8.W)))
+
+      val foo = Queue(in, 2)
+      val bar = Queue(foo, 2)
+      out <> bar
+    }
+
+    val chirrtl = ChiselStage.emitCHIRRTL(new HasTwoQueues)
+    chirrtl should include("inst foo_q of Queue")
+    chirrtl should include("inst bar_q of Queue")
   }
 }

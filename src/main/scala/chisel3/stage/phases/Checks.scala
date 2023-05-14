@@ -9,7 +9,7 @@ import firrtl.annotations.Annotation
 import firrtl.options.{Dependency, OptionsException, Phase}
 
 /** Sanity checks an [[firrtl.AnnotationSeq]] before running the main [[firrtl.options.Phase]]s of
-  * [[chisel3.stage.ChiselStage]].
+  * `chisel3.stage.ChiselStage`.
   */
 class Checks extends Phase {
 
@@ -31,21 +31,24 @@ class Checks extends Phase {
       throw new OptionsException(
         s"""|At most one NoRunFirrtlCompilerAnnotation can be specified, but found '${noF.size}'. Did you duplicate:
             |    - option or annotation: -chnrf, --no-run-firrtl, NoRunFirrtlCompilerAnnotation
-            |""".stripMargin)
+            |""".stripMargin
+      )
     }
 
     if (st.size > 1) {
       throw new OptionsException(
         s"""|At most one PrintFullStackTraceAnnotation can be specified, but found '${noF.size}'. Did you duplicate:
             |    - option or annotation: --full-stacktrace, PrintFullStackTraceAnnotation
-            |""".stripMargin)
+            |""".stripMargin
+      )
     }
 
     if (outF.size > 1) {
       throw new OptionsException(
         s"""|At most one Chisel output file can be specified but found '${outF.size}'. Did you duplicate:
             |    - option or annotation: --chisel-output-file, ChiselOutputFileAnnotation
-            |""".stripMargin)
+            |""".stripMargin
+      )
     }
 
     annotations

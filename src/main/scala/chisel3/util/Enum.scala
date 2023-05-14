@@ -6,7 +6,6 @@
 package chisel3.util
 
 import chisel3._
-import chisel3.internal.chiselRuntimeDeprecated
 
 /** Defines a set of unique UInt constants
   *
@@ -27,9 +26,10 @@ import chisel3.internal.chiselRuntimeDeprecated
   * }}}
   */
 trait Enum {
+
   /** Returns a sequence of Bits subtypes with values from 0 until n. Helper method. */
   protected def createValues(n: Int): Seq[UInt] =
-    (0 until n).map(_.U((1 max log2Ceil(n)).W))
+    (0 until n).map(_.U((1.max(log2Ceil(n))).W))
 
   /** Returns n unique UInt values
     *

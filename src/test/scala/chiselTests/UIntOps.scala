@@ -2,11 +2,10 @@
 
 package chiselTests
 
+import circt.stage.ChiselStage
 import chisel3._
-import org.scalatest._
-import chisel3.stage.ChiselStage
 import chisel3.testers.BasicTester
-import org.scalacheck.Shrink
+import chisel3.util._
 import org.scalatest.matchers.should.Matchers
 
 class UIntOps extends Module {
@@ -22,6 +21,8 @@ class UIntOps extends Module {
     val modout = Output(UInt(32.W))
     val lshiftout = Output(UInt(32.W))
     val rshiftout = Output(UInt(32.W))
+    val lrotateout = Output(UInt(32.W))
+    val rrotateout = Output(UInt(32.W))
     val lessout = Output(Bool())
     val greatout = Output(Bool())
     val eqout = Output(Bool())
@@ -29,6 +30,8 @@ class UIntOps extends Module {
     val lesseqout = Output(Bool())
     val greateqout = Output(Bool())
   })
+
+  dontTouch(io)
 
   val a = io.a
   val b = io.b
@@ -42,6 +45,8 @@ class UIntOps extends Module {
   io.modout := a % b
   io.lshiftout := (a << b(3, 0))(31, 0)
   io.rshiftout := a >> b
+  io.lrotateout := a.rotateLeft(5)
+  io.rrotateout := a.rotateRight(5)
   io.lessout := a < b
   io.greatout := a > b
   io.eqout := a === b
@@ -63,10 +68,18 @@ class UIntOpsTester(a: Long, b: Long) extends BasicTester {
   assert(dut.io.addampout === (a + b).U(33.W))
   assert(dut.io.subampout === (a - b).S(33.W).asUInt)
   assert(dut.io.timesout === (a * b).U(32.W))
-  assert(dut.io.divout === (a / (b max 1)).U(32.W))
-  assert(dut.io.modout === (a % (b max 1)).U(32.W))
+  assert(dut.io.divout === (a / (b.max(1))).U(32.W))
+  assert(dut.io.modout === (a % (b.max(1))).U(32.W))
   assert(dut.io.lshiftout === (a << (b % 16)).U(32.W))
   assert(dut.io.rshiftout === (a >> b).U(32.W))
+  assert(
+    dut.io.lrotateout === s"h${Integer.rotateLeft(a.toInt, 5).toHexString}"
+      .U(32.W)
+  )
+  assert(
+    dut.io.rrotateout === s"h${Integer.rotateRight(a.toInt, 5).toHexString}"
+      .U(32.W)
+  )
   assert(dut.io.lessout === (a < b).B)
   assert(dut.io.greatout === (a > b).B)
   assert(dut.io.eqout === (a == b).B)
@@ -93,15 +106,81 @@ class BadBoolConversion extends Module {
   io.b := io.u.asBool
 }
 
+class ZeroWidthBoolConversion extends Module {
+  val io = IO(new Bundle {
+    val u = Input(UInt(0.W))
+    val b = Output(Bool())
+  })
+  io.b := io.u.asBool
+}
+
 class NegativeShift(t: => Bits) extends Module {
   val io = IO(new Bundle {})
   Reg(t) >> -1
 }
 
+class BasicRotate extends BasicTester {
+  val shiftAmount = random.LFSR(4)
+  val ctr = RegInit(0.U(4.W))
+
+  val rotL = 1.U(3.W).rotateLeft(shiftAmount)
+  val rotR = 1.U(3.W).rotateRight(shiftAmount)
+
+  printf("Shift amount: %d rotateLeft:%b rotateRight:%b\n", shiftAmount, rotL, rotR)
+
+  switch(shiftAmount % 3.U) {
+    is(0.U, 3.U) {
+      assert(rotL === "b001".U)
+      assert(rotR === "b001".U)
+    }
+    is(1.U) {
+      assert(rotL === "b010".U)
+      assert(rotR === "b100".U)
+    }
+    is(2.U) {
+      assert(rotL === "b100".U)
+      assert(rotR === "b010".U)
+    }
+  }
+
+  ctr := ctr + 1.U
+
+  when(ctr === 15.U) {
+    stop()
+  }
+}
+
+/** rotating a w-bit word left by n should be equivalent to rotating it by w - n
+  * to the left
+  */
+class MatchedRotateLeftAndRight(w: Int = 13) extends BasicTester {
+  val initValue = BigInt(w, scala.util.Random)
+  println(s"Initial value: ${initValue.toString(2)}")
+
+  val maxWidthBits = log2Ceil(w + 1)
+  val shiftAmount1 = RegInit(0.U(w.W))
+  val shiftAmount2 = RegInit(w.U(w.W))
+  shiftAmount1 := shiftAmount1 + 1.U
+  shiftAmount2 := shiftAmount2 - 1.U
+
+  val value = RegInit(initValue.U(w.W))
+
+  val out1 = value.rotateLeft(shiftAmount1)
+  val out2 = value.rotateRight(shiftAmount2)
+
+  printf("rotateLeft by %d: %b\n", shiftAmount1, out1)
+
+  assert(out1 === out2)
+  when(shiftAmount1 === w.U) {
+    assert(out1 === initValue.U)
+    stop()
+  }
+}
+
 class UIntLitExtractTester extends BasicTester {
-  assert("b101010".U(2) === false.B)
-  assert("b101010".U(3) === true.B)
-  assert("b101010".U(100) === false.B)
+  assert("b101010".U.extract(2) === false.B)
+  assert("b101010".U.extract(3) === true.B)
+  assert("b101010".U.extract(100) === false.B)
   assert("b101010".U(3, 0) === "b1010".U)
   assert("b101010".U(9, 0) === "b0000101010".U)
 
@@ -113,17 +192,67 @@ class UIntLitExtractTester extends BasicTester {
   stop()
 }
 
+class UIntLitZeroWidthTester extends BasicTester {
+  assert(-0.U(0.W) === 0.U)
+  assert(~0.U(0.W) === 0.U)
+  assert(0.U(0.W) + 0.U(0.W) === 0.U)
+  assert(5.U * 0.U(0.W) === 0.U)
+  assert(0.U(0.W) / 5.U === 0.U)
+  assert(0.U(0.W).head(0) === 0.U)
+  assert(0.U(0.W).tail(0) === 0.U)
+  assert(0.U(0.W).pad(2) === 0.U)
+  assert("b0".U(0.W)(0, 0) === "b0".U)
+  stop()
+}
+
 class UIntOpsSpec extends ChiselPropSpec with Matchers with Utils {
-  // Disable shrinking on error.
-  implicit val noShrinkListVal = Shrink[List[Int]](_ => Stream.empty)
-  implicit val noShrinkInt = Shrink[Int](_ => Stream.empty)
 
   property("Bools can be created from 1 bit UInts") {
     ChiselStage.elaborate(new GoodBoolConversion)
   }
 
+  property("Bools cannot be created from 0 bit UInts") {
+    a[Exception] should be thrownBy extractCause[Exception] { ChiselStage.elaborate(new ZeroWidthBoolConversion) }
+  }
+
   property("Bools cannot be created from >1 bit UInts") {
-    a [Exception] should be thrownBy extractCause[Exception] { ChiselStage.elaborate(new BadBoolConversion) }
+    a[Exception] should be thrownBy extractCause[Exception] { ChiselStage.elaborate(new BadBoolConversion) }
+  }
+
+  property("Out-of-bounds extraction from known-width UInts") {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
+      ChiselStage.elaborate(new RawModule {
+        val u = IO(Input(UInt(2.W)))
+        u(2, 1)
+      })
+    }
+  }
+
+  property("Out-of-bounds single-bit extraction from known-width UInts") {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
+      ChiselStage.elaborate(new RawModule {
+        val u = IO(Input(UInt(2.W)))
+        u(2)
+      })
+    }
+  }
+
+  property("Out-of-bounds extraction from known-zero-width UInts") {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
+      ChiselStage.elaborate(new RawModule {
+        val u = IO(Input(UInt(0.W)))
+        u(0, 0)
+      })
+    }
+  }
+
+  property("Out-of-bounds single-bit extraction from known-zero-width UInts") {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
+      ChiselStage.elaborate(new RawModule {
+        val u = IO(Input(UInt(0.W)))
+        u(0)
+      })
+    }
   }
 
   property("UIntOps should elaborate") {
@@ -135,13 +264,27 @@ class UIntOpsSpec extends ChiselPropSpec with Matchers with Utils {
   }
 
   property("Negative shift amounts are invalid") {
-    a [ChiselException] should be thrownBy extractCause[ChiselException] {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
       ChiselStage.elaborate(new NegativeShift(UInt()))
     }
   }
 
+  property("rotateLeft and rotateRight should work for dynamic shift values") {
+    assertTesterPasses(new BasicRotate)
+  }
+
+  property(
+    "rotateLeft and rotateRight should be consistent for dynamic shift values"
+  ) {
+    assertTesterPasses(new MatchedRotateLeftAndRight)
+  }
+
   property("Bit extraction on literals should work for all non-negative indices") {
     assertTesterPasses(new UIntLitExtractTester)
+  }
+
+  property("Basic arithmetic and bit operations with zero-width literals should return correct result (0)") {
+    assertTesterPasses(new UIntLitZeroWidthTester)
   }
 
   property("asBools should support chained apply") {
@@ -150,7 +293,7 @@ class UIntOpsSpec extends ChiselPropSpec with Matchers with Utils {
         val in = Input(UInt(8.W))
         val out = Output(Bool())
       })
-      io.out := io.in.asBools()(2)
+      io.out := io.in.asBools(2)
     })
   }
 
@@ -170,6 +313,18 @@ class UIntOpsSpec extends ChiselPropSpec with Matchers with Utils {
       val op = x % y
       WireDefault(chiselTypeOf(op), op)
     }
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val y = WireDefault(UInt(8.W), DontCare)
+      val op = x % y
+      WireDefault(chiselTypeOf(op), op)
+    }
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(8.W), DontCare)
+      val y = WireDefault(UInt(0.W), DontCare)
+      val op = x % y
+      WireDefault(chiselTypeOf(op), op)
+    }
   }
 
   property("division should give the width of the numerator") {
@@ -184,6 +339,102 @@ class UIntOpsSpec extends ChiselPropSpec with Matchers with Utils {
       val y = WireDefault(UInt(8.W), DontCare)
       val op = x / y
       WireDefault(chiselTypeOf(op), op)
+    }
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val y = WireDefault(UInt(8.W), DontCare)
+      val op = x / y
+      WireDefault(chiselTypeOf(op), op)
+    }
+  }
+
+  property("head and tail should be zero-width on zero-width wires") {
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val op = x.tail(0)
+      WireDefault(chiselTypeOf(op), op)
+    }
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val op = x.head(0)
+      WireDefault(chiselTypeOf(op), op)
+    }
+  }
+
+  property("basic arithmetic operations be supported on zero-width wires") {
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val y = WireDefault(UInt(0.W), DontCare)
+      val op = x + y
+      WireDefault(chiselTypeOf(op), op)
+    }
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val y = WireDefault(UInt(0.W), DontCare)
+      val op = x - y
+      WireDefault(chiselTypeOf(op), op)
+    }
+    assertKnownWidth(0) {
+      val x = WireDefault(UInt(0.W), DontCare)
+      val y = WireDefault(UInt(0.W), DontCare)
+      val op = x * y
+      WireDefault(chiselTypeOf(op), op)
+    }
+  }
+
+  property("emit warning if dynamic index is too wide or too narrow") {
+    class TooWide extends Module {
+      val in = IO(Input(UInt(2.W)))
+      val index = IO(Input(UInt(2.W)))
+      val out = IO(Output(Bool()))
+      out := in(index)
+    }
+    class TooNarrow extends Module {
+      val in = IO(Input(UInt(3.W)))
+      val index = IO(Input(UInt(1.W)))
+      val out = IO(Output(Bool()))
+      out := in(index)
+    }
+
+    Seq(
+      grabLog(ChiselStage.elaborate(new TooWide)),
+      grabLog(ChiselStage.elaborate(new TooNarrow))
+    ).foreach {
+      case (log, _) =>
+        log should include("warn")
+    }
+
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
+      ChiselStage.elaborate(new RawModule {
+        val in = IO(Input(UInt(0.W)))
+        val index = IO(Input(UInt(1.W)))
+        val out = IO(Output(Bool()))
+        out := in(index)
+      })
+    }
+
+    class Ok extends Module {
+      val in1 = IO(Input(UInt(9.W)))
+      val index1 = IO(Input(UInt(4.W)))
+      val out1 = IO(Output(Bool()))
+      out1 := in1(index1)
+
+      val in2 = IO(Input(UInt(8.W)))
+      val index2 = IO(Input(UInt(3.W)))
+      val out2 = IO(Output(Bool()))
+      out2 := in2(index2)
+
+      val in3 = IO(Input(Bool()))
+      val index3 = IO(Input(UInt(0.W)))
+      val out3 = IO(Output(Bool()))
+      out3 := in3(index3)
+    }
+
+    Seq(
+      grabLog(ChiselStage.elaborate(new Ok))
+    ).foreach {
+      case (log, _) =>
+        log should be("")
     }
   }
 }

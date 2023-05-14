@@ -13,22 +13,43 @@ Chisel provides the `printf` function for debugging purposes. It comes in two fl
 
 ### Scala-style
 
-Chisel also supports printf in a style similar to [Scala's String Interpolation](http://docs.scala-lang.org/overviews/core/string-interpolation.html). Chisel provides a custom string interpolator `p` which can be used as follows:
+Chisel also supports printf in a style similar to [Scala's String Interpolation](http://docs.scala-lang.org/overviews/core/string-interpolation.html). Chisel provides a custom string interpolator `cf` which follows C-style format specifiers (see section [C-style](#c-style) below).
+
+Note that the Scala s-interpolator is not supported in Chisel.
+Future versions of Chisel will throw an error when using the s-interpolator
+within a printf.
 
 ```scala mdoc:invisible
 import chisel3._
-```
-```scala mdoc:compile-only
-val myUInt = 33.U
-printf(p"myUInt = $myUInt") // myUInt = 33
+
+//TODO: Make the following Module fail when using s-interpolator in a printf
+// This used to fail under 2.12 but the macro that implemented this does
+// not work properly in Scala 2.13
+// When fixed add mdoc:fail to following ```scala block and clean up
 ```
 
-Note that when concatenating `p"..."` strings, you need to start with a `p"..."` string:
+```scala
+class MyModule extends Module {
+  val in = IO(Input(UInt(8.W)))
+  printf(s"in = $in\n")
+         ^
+         +----- Do NOT use the s-interpolator in a printf
+}
+```
+
+Instead, use Chisel's `cf` interpolator as in the following examples:
+
+```scala mdoc:compile-only
+val myUInt = 33.U
+printf(cf"myUInt = $myUInt") // myUInt = 33
+```
+
+Note that when concatenating `cf"..."` strings, you need to start with a `cf"..."` string:
 
 ```scala mdoc:compile-only
 // Does not interpolate the second string
 val myUInt = 33.U
-printf("my normal string" + p"myUInt = $myUInt")
+printf("my normal string" + cf"myUInt = $myUInt")
 ```
 
 #### Simple formatting
@@ -38,14 +59,12 @@ Other formats are available as follows:
 ```scala mdoc:compile-only
 val myUInt = 33.U
 // Hexadecimal
-printf(p"myUInt = 0x${Hexadecimal(myUInt)}") // myUInt = 0x21
+printf(cf"myUInt = 0x$myUInt%x") // myUInt = 0x21
 // Binary
-printf(p"myUInt = ${Binary(myUInt)}") // myUInt = 100001
+printf(cf"myUInt = $myUInt%b") // myUInt = 100001
 // Character
-printf(p"myUInt = ${Character(myUInt)}") // myUInt = !
+printf(cf"myUInt = $myUInt%c") // myUInt = !
 ```
-
-We recognize that the format specifiers are verbose, so we are working on a more concise syntax.
 
 #### Aggregate data-types
 
@@ -53,7 +72,7 @@ Chisel provides default custom "pretty-printing" for Vecs and Bundles. The defau
 
 ```scala mdoc:compile-only
 val myVec = VecInit(5.U, 10.U, 13.U)
-printf(p"myVec = $myVec") // myVec = Vec(5, 10, 13)
+printf(cf"myVec = $myVec") // myVec = Vec(5, 10, 13)
 
 val myBundle = Wire(new Bundle {
   val foo = UInt()
@@ -61,7 +80,7 @@ val myBundle = Wire(new Bundle {
 })
 myBundle.foo := 3.U
 myBundle.bar := 11.U
-printf(p"myBundle = $myBundle") // myBundle = Bundle(a -> 3, b -> 11)
+printf(cf"myBundle = $myBundle") // myBundle = Bundle(a -> 3, b -> 11)
 ```
 
 #### Custom Printing
@@ -76,11 +95,11 @@ class Message extends Bundle {
   val data = UInt(64.W)
   override def toPrintable: Printable = {
     val char = Mux(valid, 'v'.U, '-'.U)
-    p"Message:\n" +
-    p"  valid  : ${Character(char)}\n" +
-    p"  addr   : 0x${Hexadecimal(addr)}\n" +
-    p"  length : $length\n" +
-    p"  data   : 0x${Hexadecimal(data)}\n"
+    cf"Message:\n" +
+    cf"  valid  : $char%c\n" +
+    cf"  addr   : $addr%x\n" +
+    cf"  length : $length\n" +
+    cf"  data   : $data%x\n"
   }
 }
 
@@ -90,7 +109,7 @@ myMessage.addr := "h1234".U
 myMessage.length := 10.U
 myMessage.data := "hdeadbeef".U
 
-printf(p"$myMessage")
+printf(cf"$myMessage")
 ```
 
 Which prints the following:
@@ -103,7 +122,7 @@ Message:
   data   : 0x00000000deadbeef
 ```
 
-Notice the use of `+` between `p` interpolated "strings". The results of `p` interpolation can be concatenated by using the `+` operator. For more information, please see the documentation
+Notice the use of `+` between `cf` interpolated "strings". The results of `cf` interpolation can be concatenated by using the `+` operator.
 
 ### C-Style
 

@@ -13,7 +13,7 @@
 package chisel3.internal.naming
 
 import scala.reflect.macros.whitebox.Context
-import scala.annotation.{StaticAnnotation, compileTimeOnly}
+import scala.annotation.{compileTimeOnly, StaticAnnotation}
 import scala.language.experimental.macros
 
 // Workaround for https://github.com/sbt/sbt/issues/3966
@@ -79,13 +79,13 @@ class NamingTransforms(val c: Context) {
   class ClassBodyTransformer(val contextVar: TermName) extends ValNameTransformer {
     override def transform(tree: Tree): Tree = tree match {
       case q"$mods class $tpname[..$tparams] $ctorMods(...$paramss) extends { ..$earlydefns } with ..$parents { $self => ..$stats }" =>
-        tree  // don't recurse into inner classes
+        tree // don't recurse into inner classes
       case q"$mods trait $tpname[..$tparams] extends { ..$earlydefns } with ..$parents { $self => ..$stats }" =>
-        tree  // don't recurse into inner classes
+        tree // don't recurse into inner classes
       case q"$mods def $tname[..$tparams](...$paramss): $tpt = $expr" => {
         val Modifiers(_, _, annotations) = mods
         // don't apply naming transform twice
-        val containsChiselName = annotations.map({q"new chiselName()" equalsStructure _}).fold(false)({_||_})
+        val containsChiselName = annotations.map({ q"new chiselName()" equalsStructure _ }).fold(false)({ _ || _ })
         // transforming overloaded initializers causes errors, and the transform isn't helpful
         val isInitializer = tname == TermName("<init>")
         if (containsChiselName || isInitializer) {
@@ -108,7 +108,7 @@ class NamingTransforms(val c: Context) {
       case q"return $expr" => q"return $globalNamingStack.popReturnContext($expr, $contextVar)"
       // Do not recurse into methods
       case q"$mods def $tname[..$tparams](...$paramss): $tpt = $expr" => tree
-      case other => super.transform(other)
+      case other                                                      => super.transform(other)
     }
   }
 
@@ -125,7 +125,7 @@ class NamingTransforms(val c: Context) {
     q"""
     val $contextVar = $globalNamingStack.pushContext()
     ..$transformedBody
-    if($globalNamingStack.length == 1){
+    if($globalNamingStack.length() == 1){
       $contextVar.namePrefix("")
     }
     $globalNamingStack.popReturnContext(this, $contextVar)
@@ -145,48 +145,6 @@ class NamingTransforms(val c: Context) {
     }
     """
   }
-
-  /** Applies naming transforms to vals in the annotated module or method.
-    *
-    * For methods, a hierarchical naming transform is used, where it will try to give objects names
-    * based on the call stack, assuming all functions on the stack are annotated as such and return
-    * a non-AnyVal object. Does not recurse into inner functions.
-    *
-    * For modules, this serves as the root of the call stack hierarchy for naming purposes. Methods
-    * will have chiselName annotations (non-recursively), but this does NOT affect inner classes.
-    *
-    * Basically rewrites all instances of:
-    * val name = expr
-    * to:
-    * val name = context.name(expr, name)
-    */
-  def chiselName(annottees: c.Tree*): c.Tree = {
-    var namedElts: Int = 0
-
-    val transformed = annottees.map(annottee => annottee match {
-      case q"$mods class $tpname[..$tparams] $ctorMods(...$paramss) extends { ..$earlydefns } with ..$parents { $self => ..$stats }" => {
-        val transformedStats = transformClassBody(stats)
-        namedElts += 1
-        q"$mods class $tpname[..$tparams] $ctorMods(...$paramss) extends { ..$earlydefns } with ..$parents { $self => ..$transformedStats }"
-      }
-      case q"$mods object $tname extends { ..$earlydefns } with ..$parents { $self => ..$body }" => {
-        annottee // Don't fail noisly when a companion object is passed in with the actual class def
-      }
-      // Currently disallow on traits, this won't work well with inheritance.
-      case q"$mods def $tname[..$tparams](...$paramss): $tpt = $expr" => {
-        val transformedExpr = transformHierarchicalMethod(expr)
-        namedElts += 1
-        q"$mods def $tname[..$tparams](...$paramss): $tpt = $transformedExpr"
-      }
-      case other => c.abort(c.enclosingPosition, s"@chiselName annotion may only be used on classes and methods, got ${showCode(other)}")
-    })
-
-    if (namedElts != 1) {
-      c.abort(c.enclosingPosition, s"@chiselName annotation did not match exactly one valid tree, got:\r\n${annottees.map(tree => showCode(tree)).mkString("\r\n\r\n")}")
-    }
-
-    q"..$transformed"
-  }
 }
 
 @compileTimeOnly("enable macro paradise to expand macro annotations")
@@ -196,8 +154,4 @@ class dump extends StaticAnnotation {
 @compileTimeOnly("enable macro paradise to expand macro annotations")
 class treedump extends StaticAnnotation {
   def macroTransform(annottees: Any*): Any = macro chisel3.internal.naming.DebugTransforms.treedump
-}
-@compileTimeOnly("enable macro paradise to expand macro annotations")
-class chiselName extends StaticAnnotation {
-  def macroTransform(annottees: Any*): Any = macro chisel3.internal.naming.NamingTransforms.chiselName
 }

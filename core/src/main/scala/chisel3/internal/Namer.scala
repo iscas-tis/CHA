@@ -3,13 +3,12 @@
 // This file contains part of the implementation of the naming static annotation system.
 
 package chisel3.internal.naming
-import chisel3.experimental.NoChiselNamePrefix
 
 import scala.collection.mutable.Stack
 import scala.collection.mutable.ListBuffer
 
 import java.util.IdentityHashMap
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters._ //TODO: Remove when alternative is clear or 2.12 is EOL
 
 /** Recursive Function Namer overview
   *
@@ -42,6 +41,7 @@ import scala.collection.JavaConverters._
   * ability to take descendant naming contexts.
   */
 sealed trait NamingContextInterface {
+
   /** Suggest a name (that will be propagated to FIRRTL) for an object, then returns the object
     * itself (so this can be inserted transparently anywhere).
     * Is a no-op (so safe) when applied on objects that aren't named, including non-Chisel data
@@ -53,7 +53,7 @@ sealed trait NamingContextInterface {
     * so that actual naming calls (HasId.suggestName) can happen.
     * Recursively names descendants, for those whose return value have an associated name.
     */
-  def namePrefix(prefix: String)
+  def namePrefix(prefix: String): Unit
 }
 
 /** Dummy implementation to allow for naming annotations in a non-Builder context.
@@ -61,8 +61,7 @@ sealed trait NamingContextInterface {
 object DummyNamer extends NamingContextInterface {
   def name[T](obj: T, name: String): T = obj
 
-  def namePrefix(prefix: String): Unit = {
-  }
+  def namePrefix(prefix: String): Unit = {}
 }
 
 /** Actual namer functionality.
@@ -71,22 +70,24 @@ class NamingContext extends NamingContextInterface {
   val descendants = new IdentityHashMap[AnyRef, ListBuffer[NamingContext]]()
   val anonymousDescendants = ListBuffer[NamingContext]()
   val items = ListBuffer[(AnyRef, String)]()
-  var closed = false  // a sanity check to ensure no more name() calls are done after namePrefix
+  var closed = false // a sanity check to ensure no more name() calls are done after namePrefix
 
   /** Adds a NamingContext object as a descendant - where its contained objects will have names
     * prefixed with the name given to the reference object, if the reference object is named in the
     * scope of this context.
     */
-  def addDescendant(ref: Any, descendant: NamingContext) {
+  def addDescendant(ref: Any, descendant: NamingContext): Unit = {
     ref match {
       case ref: AnyRef =>
         // getOrElseUpdate
         val l = descendants.get(ref)
-        val buf = if (l != null) l else {
-          val value = ListBuffer[NamingContext]()
-          descendants.put(ref, value)
-          value
-        }
+        val buf =
+          if (l != null) l
+          else {
+            val value = ListBuffer[NamingContext]()
+            descendants.put(ref, value)
+            value
+          }
         buf += descendant
       case _ => anonymousDescendants += descendant
     }
@@ -95,7 +96,6 @@ class NamingContext extends NamingContextInterface {
   def name[T](obj: T, name: String): T = {
     assert(!closed, "Can't name elements after namePrefix called")
     obj match {
-      case _: NoChiselNamePrefix => // Don't name things with NoChiselNamePrefix
       case ref: AnyRef => items += ((ref, name))
       case _ =>
     }
@@ -156,5 +156,5 @@ class NamingStack {
     }
   }
 
-  def length() : Int = namingStack.length
+  def length(): Int = namingStack.length
 }

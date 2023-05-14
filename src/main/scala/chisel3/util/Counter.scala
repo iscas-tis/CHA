@@ -3,7 +3,7 @@
 package chisel3.util
 
 import chisel3._
-import chisel3.internal.naming.chiselName  // can't use chisel3_ version because of compile order
+import chisel3.experimental.AffectsChiselPrefix
 
 /** Used to generate an inline (logic directly in the containing Module, no internal Module is created)
   * hardware counter.
@@ -27,8 +27,7 @@ import chisel3.internal.naming.chiselName  // can't use chisel3_ version because
   *   }
   * }}}
   */
-@chiselName
-class Counter private (r: Range, oldN: Option[Int] = None) {
+class Counter private (r: Range, oldN: Option[Int] = None) extends AffectsChiselPrefix {
   require(r.length > 0, s"Counter range cannot be empty, got: $r")
   require(r.start >= 0 && r.end >= 0, s"Counter range must be positive, got: $r")
 
@@ -42,11 +41,13 @@ class Counter private (r: Range, oldN: Option[Int] = None) {
     */
   def n: Int = oldN match {
     case Some(x) => x
-    case None =>
+    case None    =>
       // Reasonable for typical ranges
-      require(r.start == 0 && r.step == 1,
+      require(
+        r.start == 0 && r.step == 1,
         s"Counter.n only defined on ranges starting at 0 with step == 1, got $r. " +
-        "Use underlying range.")
+          "Use underlying range."
+      )
       r.last + 1
   }
 
@@ -54,7 +55,7 @@ class Counter private (r: Range, oldN: Option[Int] = None) {
     *
     * @param n number of steps before the counter resets
     */
-  def this(n: Int) { this(0 until math.max(1, n), Some(n)) }
+  def this(n: Int) = { this(0 until math.max(1, n), Some(n)) }
 
   /** The current value of the counter. */
   val value = if (r.length > 1) RegInit(r.head.U(width.W)) else WireInit(r.head.U)
@@ -98,24 +99,23 @@ class Counter private (r: Range, oldN: Option[Int] = None) {
   }
 }
 
-object Counter
-{
+object Counter {
+
   /** Instantiate a [[Counter! counter]] with the specified number of counts.
     */
   def apply(n: Int): Counter = new Counter(n)
 
   /** Instantiate a [[Counter! counter]] with the specified number of counts and a gate.
-   *
+    *
     * @param cond condition that controls whether the counter increments this cycle
     * @param n number of counts before the counter resets
     * @return tuple of the counter value and whether the counter will wrap (the value is at
     * maximum and the condition is true).
     */
-  @chiselName
   def apply(cond: Bool, n: Int): (UInt, Bool) = {
     val c = new Counter(n)
     val wrap = WireInit(false.B)
-    when (cond) { wrap := c.inc() }
+    when(cond) { wrap := c.inc() }
     (c.value, wrap)
   }
 
@@ -127,7 +127,6 @@ object Counter
     * @return tuple of the counter value and whether the counter will wrap (the value is at
     * maximum and the condition is true).
     */
-  @chiselName
   def apply(r: Range, enable: Bool = true.B, reset: Bool = false.B): (UInt, Bool) = {
     val c = new Counter(r)
     val wrap = WireInit(false.B)

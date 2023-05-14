@@ -4,28 +4,29 @@ package chiselTests.naming
 
 import chisel3._
 import chisel3.aop.Select
-import chisel3.experimental.{prefix, treedump}
+import chisel3.experimental.prefix
 import chiselTests.{ChiselFlatSpec, Utils}
+import circt.stage.ChiselStage
 
 class NamePluginSpec extends ChiselFlatSpec with Utils {
   implicit val minimumScalaVersion: Int = 12
 
   "Scala plugin" should "name internally scoped components" in {
     class Test extends Module {
-      { val mywire = Wire(UInt(3.W))}
+      { val mywire = Wire(UInt(3.W)) }
     }
-    aspectTest(() => new Test) {
-      top: Test => Select.wires(top).head.toTarget.ref should be("mywire")
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).head.toTarget.ref should be("mywire")
     }
   }
 
   "Scala plugin" should "name internally scoped instances" in {
-    class Inner extends Module { }
+    class Inner extends Module {}
     class Test extends Module {
       { val myinstance = Module(new Inner) }
     }
-    aspectTest(() => new Test) {
-      top: Test => Select.instances(top).head.instanceName should be("myinstance")
+    aspectTest(() => new Test) { top: Test =>
+      Select.instances(top).head.instanceName should be("myinstance")
     }
   }
 
@@ -41,8 +42,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
         builder()
       }
     }
-    aspectTest(() => new Test) {
-      top: Test => Select.wires(top).map(_.instanceName) should be (List("first_wire", "second_wire"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("first_wire", "second_wire"))
     }
   }
 
@@ -64,9 +65,27 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
         }
       }
     }
-    aspectTest(() => new Test) {
-      top: Test => Select.wires(top).map(_.instanceName) should be (List("x1_first_wire1", "x1", "x2_second_wire1", "x2"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("x1_first_wire1", "x1", "x2_second_wire1", "x2"))
     }
+  }
+
+  "Scala plugin" should "name verification ops" in {
+    class Test extends Module {
+      val foo, bar = IO(Input(UInt(8.W)))
+
+      {
+        val x1 = chisel3.assert(1.U === 1.U)
+        val x2 = cover(foo =/= bar)
+        val x3 = chisel3.assume(foo =/= 123.U)
+        val x4 = printf("foo = %d\n", foo)
+      }
+    }
+    val chirrtl = ChiselStage.emitCHIRRTL(new Test)
+    (chirrtl should include).regex("assert.*: x1")
+    (chirrtl should include).regex("cover.*: x2")
+    (chirrtl should include).regex("assume.*: x3")
+    (chirrtl should include).regex("printf.*: x4")
   }
 
   "Naming on option" should "work" in {
@@ -79,12 +98,10 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
 
       { val blah = builder() }
     }
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("blah"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("blah"))
     }
   }
-
 
   "Naming on iterables" should "work" in {
 
@@ -100,9 +117,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
         }
       }
     }
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("blah_0", "blah_1"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("blah_0", "blah_1"))
     }
   }
 
@@ -122,15 +138,15 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
         }
       }
     }
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (
-          List(
-            "blah_0_0",
-            "blah_0_1",
-            "blah_1_0",
-            "blah_1_1"
-          ))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(
+        List(
+          "blah_0_0",
+          "blah_0_1",
+          "blah_1_0",
+          "blah_1_1"
+        )
+      )
     }
   }
 
@@ -146,9 +162,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
 
       { val blah = builder() }
     }
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("a", "b"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("a", "b"))
     }
   }
 
@@ -160,9 +175,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.ios(top).map(_.instanceName) should be (List("a"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.ios(top).map(_.instanceName) should be(List("a"))
     }
   }
 
@@ -174,9 +188,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("a"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("a"))
     }
   }
 
@@ -193,9 +206,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.ios(top).map(_.instanceName) should be (List("out"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.ios(top).map(_.instanceName) should be(List("out"))
     }
   }
 
@@ -212,9 +224,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("fizz"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("fizz"))
     }
   }
 
@@ -226,12 +237,10 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.ios(top).map(_.instanceName) should be (List("a"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.ios(top).map(_.instanceName) should be(List("a"))
     }
   }
-
 
   "autoSeed" should "override automatic naming for non-IO" in {
     class Test extends Module {
@@ -241,9 +250,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("b"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("b"))
     }
   }
 
@@ -254,9 +262,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("a", "b"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("a", "b"))
     }
   }
 
@@ -268,9 +275,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("x", "b"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("x", "b"))
     }
   }
 
@@ -283,9 +289,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("a", "b"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("a", "b"))
     }
   }
 
@@ -302,9 +307,8 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test =>
-        Select.wires(top).map(_.instanceName) should be (List("w", "a", "_WIRE"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("w", "a", "_WIRE"))
     }
   }
 
@@ -332,9 +336,27 @@ class NamePluginSpec extends ChiselFlatSpec with Utils {
       }
     }
 
-    aspectTest(() => new Test) {
-      top: Test => Select.wires(top).map(_.instanceName) should be (List("a_b_c", "a_b", "a"))
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("a_b_c", "a_b", "a"))
+    }
+  }
+
+  behavior.of("Unnamed values (aka \"Temporaries\")")
+
+  they should "be declared by starting the name with '_'" in {
+    class Test extends Module {
+      {
+        val a = {
+          val b = {
+            val _c = Wire(UInt(3.W))
+            4.U // literal so there is no name
+          }
+          b
+        }
+      }
+    }
+    aspectTest(() => new Test) { top: Test =>
+      Select.wires(top).map(_.instanceName) should be(List("_a_b_c"))
     }
   }
 }
-

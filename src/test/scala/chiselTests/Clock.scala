@@ -3,8 +3,8 @@
 package chiselTests
 
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.testers.BasicTester
+import circt.stage.ChiselStage
 
 class ClockAsUIntTester extends BasicTester {
   assert(true.B.asClock.asUInt === 1.U)
@@ -24,14 +24,13 @@ class WithClockAndNoReset extends RawModule {
   out := a
 }
 
-
 class ClockSpec extends ChiselPropSpec {
   property("Bool.asClock.asUInt should pass a signal through unaltered") {
     assertTesterPasses { new ClockAsUIntTester }
   }
 
   property("Should be able to use withClock in a module with no reset") {
-    val circuit = ChiselStage.emitChirrtl(new WithClockAndNoReset)
-    circuit.contains("reg a : UInt<1>, clock2") should be (true)
+    val circuit = ChiselStage.emitCHIRRTL(new WithClockAndNoReset)
+    circuit.contains("reg a : UInt<1>, clock2") should be(true)
   }
 }

@@ -3,7 +3,7 @@
 package chiselTests
 
 import chisel3._
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 import chisel3.util.Queue
 
 class InstanceNameModule extends Module {
@@ -23,7 +23,7 @@ class InstanceNameModule extends Module {
 }
 
 class InstanceNameSpec extends ChiselFlatSpec {
-  behavior of "instanceName"
+  behavior.of("instanceName")
   val moduleName = "InstanceNameModule"
   var m: InstanceNameModule = _
   ChiselStage.elaborate { m = new InstanceNameModule; m }
@@ -33,18 +33,18 @@ class InstanceNameSpec extends ChiselFlatSpec {
     assert(io == moduleName + ".io")
   }
 
-  it should "work with internal vals" in {
+  it should "work for literals" in {
     val x = m.x.pathName
-    val y = m.y.pathName
-    val z = m.z.pathName
     assert(x == moduleName + ".UInt<2>(\"h03\")")
-    assert(y == moduleName + ".y")
-    assert(z == moduleName + ".z")
   }
 
-  it should "work with bundle elements" in {
-    val foo = m.z.foo.pathName
-    assert(foo == moduleName + ".z.foo")
+  it should "NOT work for non-hardware values" in {
+    a[ChiselException] shouldBe thrownBy { m.y.pathName }
+    a[ChiselException] shouldBe thrownBy { m.z.pathName }
+  }
+
+  it should "NOT work for non-hardware bundle elements" in {
+    a[ChiselException] shouldBe thrownBy { m.z.foo.pathName }
   }
 
   it should "work with modules" in {

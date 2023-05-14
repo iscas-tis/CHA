@@ -7,7 +7,8 @@ import scala.language.experimental.macros
 import chisel3.internal._
 import chisel3.internal.Builder.pushCommand
 import chisel3.internal.firrtl._
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3.experimental.SourceInfo
+import chisel3.internal.sourceinfo.SourceInfoTransform
 
 /** Utility for constructing hardware registers
   *
@@ -27,25 +28,26 @@ import chisel3.internal.sourceinfo.SourceInfo
   * // Width of r4.unknown is inferred
   * // Width of r4.known is set to 8
   * }}}
-  *
   */
 object Reg {
+
   /** Construct a [[Reg]] from a type template with no initialization value (reset is ignored).
     * Value will not change unless the [[Reg]] is given a connection.
     * @param t The template from which to construct this wire
     */
-  def apply[T <: Data](t: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T = {
+  def apply[T <: Data](source: => T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T = {
+    val prevId = Builder.idGen.value
+    val t = source // evaluate once (passed by name)
     if (compileOptions.declaredTypeMustBeUnbound) {
       requireIsChiselType(t, "reg type")
     }
-    val reg = t.cloneTypeFull
+    val reg = if (!t.mustClone(prevId)) t else t.cloneTypeFull
     val clock = Node(Builder.forcedClock)
 
-    reg.bind(RegBinding(Builder.forcedUserModule, Builder.currentWhen()))
+    reg.bind(RegBinding(Builder.forcedUserModule, Builder.currentWhen))
     pushCommand(DefReg(sourceInfo, reg, clock))
     reg
   }
-
 }
 
 /** Utility for constructing one-cycle delayed versions of signals
@@ -74,6 +76,7 @@ object Reg {
   * }}}
   */
 object RegNext {
+
   /** Returns a register ''with an unset width'' connected to the signal `next` and with no reset value. */
   def apply[T <: Data](next: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T = {
     val model = (next match {
@@ -94,7 +97,7 @@ object RegNext {
       case next: Bits => next.cloneTypeWidth(Width())
       case next => next.cloneTypeFull
     }).asInstanceOf[T]
-    val reg = RegInit(model, init)  // TODO: this makes NO sense
+    val reg = RegInit(model, init) // TODO: this makes NO sense
 
     requireIsHardware(next, "reg next")
     reg := next
@@ -162,6 +165,7 @@ object RegNext {
   * }}}
   */
 object RegInit {
+
   /** Construct a [[Reg]] from a type template initialized to the specified value on reset
     * @param t The type template used to construct this [[Reg]]
     * @param init The value the [[Reg]] is initialized to on reset
@@ -174,7 +178,7 @@ object RegInit {
     val clock = Builder.forcedClock
     val reset = Builder.forcedReset
 
-    reg.bind(RegBinding(Builder.forcedUserModule, Builder.currentWhen()))
+    reg.bind(RegBinding(Builder.forcedUserModule, Builder.currentWhen))
     requireIsHardware(init, "reg initializer")
     pushCommand(DefRegInit(sourceInfo, reg, clock.ref, reset.ref, init.ref))
     reg

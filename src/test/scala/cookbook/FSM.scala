@@ -4,11 +4,10 @@ package cookbook
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.ChiselEnum
 
 /* ### How do I create a finite state machine?
  *
- * Use Chisel StrongEnum to construct the states and switch & is to construct the FSM
+ * Use ChiselEnum to construct the states and switch & is to construct the FSM
  * control logic
  */
 
@@ -26,21 +25,21 @@ class DetectTwoOnes extends Module {
 
   io.out := (state === State.sTwo1s)
 
-  switch (state) {
-    is (State.sNone) {
-      when (io.in) {
+  switch(state) {
+    is(State.sNone) {
+      when(io.in) {
         state := State.sOne1
       }
     }
-    is (State.sOne1) {
-      when (io.in) {
+    is(State.sOne1) {
+      when(io.in) {
         state := State.sTwo1s
-      } .otherwise {
+      }.otherwise {
         state := State.sNone
       }
     }
-    is (State.sTwo1s) {
-      when (!io.in) {
+    is(State.sTwo1s) {
+      when(!io.in) {
         state := State.sNone
       }
     }
@@ -53,7 +52,8 @@ class DetectTwoOnesTester extends CookbookTester(10) {
 
   // Inputs and expected results
   val inputs: Vec[Bool] = VecInit(false.B, true.B, false.B, true.B, true.B, true.B, false.B, true.B, true.B, false.B)
-  val expected: Vec[Bool] = VecInit(false.B, false.B, false.B, false.B, false.B, true.B, true.B, false.B, false.B, true.B)
+  val expected: Vec[Bool] =
+    VecInit(false.B, false.B, false.B, false.B, false.B, true.B, true.B, false.B, false.B, true.B)
 
   dut.io.in := inputs(cycle)
   assert(dut.io.out === expected(cycle))

@@ -9,7 +9,6 @@ import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
 import scala.reflect.macros.whitebox
 
-
 /** Transforms a function call so that it can both provide implicit-style source information and
   * have a chained apply call. Without macros, only one is possible, since having a implicit
   * argument in the definition will cause the compiler to interpret a chained apply as an
@@ -23,7 +22,7 @@ trait SourceInfoTransformMacro {
   val c: Context
   import c.universe._
   def thisObj: Tree = c.prefix.tree
-  def implicitSourceInfo = q"implicitly[_root_.chisel3.internal.sourceinfo.SourceInfo]"
+  def implicitSourceInfo = q"implicitly[_root_.chisel3.experimental.SourceInfo]"
   def implicitCompileOptions = q"implicitly[_root_.chisel3.CompileOptions]"
 }
 
@@ -64,7 +63,6 @@ class DefinitionWrapTransform(val c: Context) extends SourceInfoTransformMacro {
     q"$thisObj.do_wrap($proto)($implicitSourceInfo)"
   }
 }
-
 
 // Workaround for https://github.com/sbt/sbt/issues/3966
 object InstanceTransform
@@ -138,7 +136,7 @@ class VecTransform(val c: Context) extends SourceInfoTransformMacro {
   def reduceTree(redOp: c.Tree, layerOp: c.Tree): c.Tree = {
     q"$thisObj.do_reduceTree($redOp,$layerOp)($implicitSourceInfo, $implicitCompileOptions)"
   }
-  def reduceTreeDefault(redOp: c.Tree ): c.Tree = {
+  def reduceTreeDefault(redOp: c.Tree): c.Tree = {
     q"$thisObj.do_reduceTree($redOp)($implicitSourceInfo, $implicitCompileOptions)"
   }
 }
@@ -148,13 +146,17 @@ class VecTransform(val c: Context) extends SourceInfoTransformMacro {
   */
 abstract class AutoSourceTransform extends SourceInfoTransformMacro {
   import c.universe._
+
   /** Returns the TermName of the transformed function, which is the applied function name with do_
     * prepended.
     */
   def doFuncTerm: TermName = {
     val funcName = c.macroApplication match {
       case q"$_.$funcName[..$_](...$_)" => funcName
-      case _ => throw new Exception(s"Chisel Internal Error: Could not resolve function name from macro application: ${showCode(c.macroApplication)}")
+      case _ =>
+        throw new Exception(
+          s"Chisel Internal Error: Could not resolve function name from macro application: ${showCode(c.macroApplication)}"
+        )
     }
     TermName("do_" + funcName)
   }
@@ -165,7 +167,12 @@ object SourceInfoTransform
 class SourceInfoTransform(val c: Context) extends AutoSourceTransform {
   import c.universe._
 
-  def noArg(): c.Tree = {
+  def noArg: c.Tree = {
+    q"$thisObj.$doFuncTerm($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  /** Necessary for dummy methods to auto-apply their arguments to this macro */
+  def noArgDummy(dummy: c.Tree*): c.Tree = {
     q"$thisObj.$doFuncTerm($implicitSourceInfo, $implicitCompileOptions)"
   }
 
@@ -193,8 +200,56 @@ class SourceInfoTransform(val c: Context) extends AutoSourceTransform {
     q"$thisObj.$doFuncTerm($x, $y)($implicitSourceInfo, $implicitCompileOptions)"
   }
 
+  def nxArg(n: c.Tree, x: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($n, $x)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def idxEnClockArg(idx: c.Tree, en: c.Tree, clock: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($idx, $en, $clock)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
   def xEnArg(x: c.Tree, en: c.Tree): c.Tree = {
     q"$thisObj.$doFuncTerm($x, $en)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def arArg(a: c.Tree, r: c.Tree*): c.Tree = {
+    q"$thisObj.$doFuncTerm($a, ..$r)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def rArg(r: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($r)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def nInArg(n: c.Tree, in: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($n, $in)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def nextEnableArg(next: c.Tree, enable: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($next, $enable)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def nextInitEnableArg(next: c.Tree, init: c.Tree, enable: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($next, $init, $enable)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def inNArg(in: c.Tree, n: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($in, $n)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def inNEnArg(in: c.Tree, n: c.Tree, en: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($in, $n, $en)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def inNResetEnArg(in: c.Tree, n: c.Tree, reset: c.Tree, en: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($in, $n, $reset, $en)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def inNResetDataArg(in: c.Tree, n: c.Tree, resetData: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($in, $n, $resetData)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  def inNResetDataEnArg(in: c.Tree, n: c.Tree, resetData: c.Tree, en: c.Tree): c.Tree = {
+    q"$thisObj.$doFuncTerm($in, $n, $resetData, $en)($implicitSourceInfo, $implicitCompileOptions)"
   }
 }
 
@@ -218,17 +273,51 @@ class CompileOptionsTransform(val c: Context) extends AutoSourceTransform {
 
 // Workaround for https://github.com/sbt/sbt/issues/3966
 object SourceInfoWhiteboxTransform
+
 /** Special whitebox version of the blackbox SourceInfoTransform, used when fun things need to
   * happen to satisfy the type system while preventing the use of macro overrides.
   */
 class SourceInfoWhiteboxTransform(val c: whitebox.Context) extends AutoSourceTransform {
   import c.universe._
 
-  def noArg(): c.Tree = {
+  def noArg: c.Tree = {
+    q"$thisObj.$doFuncTerm($implicitSourceInfo, $implicitCompileOptions)"
+  }
+
+  /** Necessary for dummy methods to auto-apply their arguments to this macro */
+  def noArgDummy(dummy: c.Tree*): c.Tree = {
     q"$thisObj.$doFuncTerm($implicitSourceInfo, $implicitCompileOptions)"
   }
 
   def thatArg(that: c.Tree): c.Tree = {
     q"$thisObj.$doFuncTerm($that)($implicitSourceInfo, $implicitCompileOptions)"
+  }
+}
+
+// Workaround for https://github.com/sbt/sbt/issues/3966
+object IntLiteralApplyTransform
+
+class IntLiteralApplyTransform(val c: Context) extends AutoSourceTransform {
+  import c.universe._
+
+  def safeApply(x: c.Tree): c.Tree = {
+    c.macroApplication match {
+      case q"$_.$clazz($lit).$func.apply($arg)" =>
+        if (
+          Set("U", "S").contains(func.toString) &&
+          Set("fromStringToLiteral", "fromIntToLiteral", "fromLongToIteral", "fromBigIntToLiteral").contains(
+            clazz.toString
+          )
+        ) {
+          val msg =
+            s"""Passing an Int to .$func is usually a mistake: It does *not* set the width but does a bit extract.
+               |Did you mean .$func($arg.W)?
+               |If you do want bit extraction, use .$func.extract($arg) instead.
+               |""".stripMargin
+          c.warning(c.enclosingPosition, msg)
+        }
+      case _ => // do nothing
+    }
+    q"$thisObj.$doFuncTerm($x)($implicitSourceInfo, $implicitCompileOptions)"
   }
 }

@@ -3,14 +3,23 @@
 package chisel3.stage
 
 import firrtl.annotations.{Annotation, NoTargetAnnotation}
-import firrtl.options.{BufferedCustomFileEmission, CustomFileEmission, HasShellOptions, OptionsException, ShellOption, StageOptions, Unserializable}
+import firrtl.options.{
+  BufferedCustomFileEmission,
+  CustomFileEmission,
+  HasShellOptions,
+  OptionsException,
+  ShellOption,
+  StageOptions,
+  Unserializable
+}
 import firrtl.options.Viewer.view
-import chisel3.{ChiselException, Module}
+import chisel3.{deprecatedMFCMessage, ChiselException, Module}
 import chisel3.RawModule
 import chisel3.internal.Builder
 import chisel3.internal.firrtl.{Circuit, Emitter => OldEmitter}
 import firrtl.AnnotationSeq
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 
 /** Mixin that indicates that this is an [[firrtl.annotations.Annotation]] used to generate a [[ChiselOptions]] view.
   */
@@ -18,6 +27,7 @@ sealed trait ChiselOption { this: Annotation => }
 
 /** Disable the execution of the FIRRTL compiler by Chisel
   */
+@deprecated(deprecatedMFCMessage + """ Use "--target chirrtl" with circt.stage.ChiselStage.""", "Chisel 3.6")
 case object NoRunFirrtlCompilerAnnotation
     extends NoTargetAnnotation
     with ChiselOption
@@ -29,7 +39,9 @@ case object NoRunFirrtlCompilerAnnotation
       longOption = "no-run-firrtl",
       toAnnotationSeq = _ => Seq(NoRunFirrtlCompilerAnnotation),
       helpText = "Do not run the FIRRTL compiler (generate FIRRTL IR from Chisel and exit)",
-      shortOption = Some("chnrf") ) )
+      shortOption = Some("chnrf")
+    )
+  )
 
 }
 
@@ -45,8 +57,93 @@ case object PrintFullStackTraceAnnotation
     new ShellOption[Unit](
       longOption = "full-stacktrace",
       toAnnotationSeq = _ => Seq(PrintFullStackTraceAnnotation),
-      helpText = "Show full stack trace when an exception is thrown" ) )
+      helpText = "Show full stack trace when an exception is thrown"
+    )
+  )
 
+}
+
+/** On recoverable errors, this will cause Chisel to throw an exception instead of continuing.
+  */
+case object ThrowOnFirstErrorAnnotation
+    extends NoTargetAnnotation
+    with ChiselOption
+    with HasShellOptions
+    with Unserializable {
+
+  val options = Seq(
+    new ShellOption[Unit](
+      longOption = "throw-on-first-error",
+      toAnnotationSeq = _ => Seq(ThrowOnFirstErrorAnnotation),
+      helpText = "Throw an exception on the first error instead of continuing"
+    )
+  )
+
+}
+
+/** When enabled, warnings will be treated as errors.
+  */
+case object WarningsAsErrorsAnnotation
+    extends NoTargetAnnotation
+    with ChiselOption
+    with HasShellOptions
+    with Unserializable {
+
+  val options = Seq(
+    new ShellOption[Unit](
+      longOption = "warnings-as-errors",
+      toAnnotationSeq = _ => Seq(WarningsAsErrorsAnnotation),
+      helpText = "Treat warnings as errors"
+    )
+  )
+
+}
+
+/** A root directory for source files, used for enhanced error reporting
+  *
+  * More than one may be provided. If a source file is found in more than one source root,
+  * the first match will be used in error reporting.
+  */
+case class SourceRootAnnotation(directory: File) extends NoTargetAnnotation with Unserializable with ChiselOption
+
+object SourceRootAnnotation extends HasShellOptions {
+  val options = Seq(
+    new ShellOption[String](
+      longOption = "source-root",
+      toAnnotationSeq = { dir =>
+        val f = new File(dir)
+        if (!f.isDirectory()) {
+          throw new OptionsException(s"Must be directory that exists!")
+        }
+        Seq(SourceRootAnnotation(f))
+      },
+      helpText = "Root directory for source files, used for enhanced error reporting",
+      helpValueName = Some("<file>")
+    )
+  )
+}
+
+/** Warn when reflective naming changes names of signals */
+@deprecated("Support for reflective naming has been removed, this object no longer does anything", "Chisel 3.6")
+case object WarnReflectiveNamingAnnotation
+    extends NoTargetAnnotation
+    with ChiselOption
+    with HasShellOptions
+    with Unserializable {
+
+  private val longOption = "warn:reflective-naming"
+
+  val options = Seq(
+    new ShellOption[Unit](
+      longOption = longOption,
+      toAnnotationSeq = _ => {
+        val msg = s"'$longOption' no longer does anything and will be removed in Chisel 3.7"
+        firrtl.options.StageUtils.dramaticWarning(msg)
+        Seq(this)
+      },
+      helpText = "(deprecated, this option does nothing)"
+    )
+  )
 }
 
 /** An [[firrtl.annotations.Annotation]] storing a function that returns a Chisel module
@@ -68,15 +165,24 @@ object ChiselGeneratorAnnotation extends HasShellOptions {
     * that Module is found
     */
   def apply(name: String): ChiselGeneratorAnnotation = {
-    val gen = () => try {
-      Class.forName(name).asInstanceOf[Class[_ <: RawModule]].newInstance()
-    } catch {
-      case e: ClassNotFoundException =>
-        throw new OptionsException(s"Unable to locate module '$name'! (Did you misspell it?)", e)
-      case e: InstantiationException =>
-        throw new OptionsException(
-          s"Unable to create instance of module '$name'! (Does this class take parameters?)", e)
-    }
+    val gen = () =>
+      try {
+        Class.forName(name).asInstanceOf[Class[_ <: RawModule]].getDeclaredConstructor().newInstance()
+      } catch {
+        // The reflective instantiation will box any exceptions thrown, unbox them here.
+        // Note that this does *not* need to chain with the catches below which are triggered by an
+        // invalid name or a constructor that takes arguments rather than by the code being run
+        // itself.
+        case e: InvocationTargetException =>
+          throw e.getCause
+        case e: ClassNotFoundException =>
+          throw new OptionsException(s"Unable to locate module '$name'! (Did you misspell it?)", e)
+        case e: NoSuchMethodException =>
+          throw new OptionsException(
+            s"Unable to create instance of module '$name'! (Does this class take parameters?)",
+            e
+          )
+      }
     ChiselGeneratorAnnotation(gen)
   }
 
@@ -85,17 +191,16 @@ object ChiselGeneratorAnnotation extends HasShellOptions {
       longOption = "module",
       toAnnotationSeq = (a: String) => Seq(ChiselGeneratorAnnotation(a)),
       helpText = "The name of a Chisel module to elaborate (module must be in the classpath)",
-      helpValueName = Some("<package>.<module>") ) )
+      helpValueName = Some("<package>.<module>")
+    )
+  )
 
 }
 
 /** Stores a Chisel Circuit
   * @param circuit a Chisel Circuit
   */
-case class ChiselCircuitAnnotation(circuit: Circuit)
-    extends NoTargetAnnotation
-    with ChiselOption
-    with Unserializable {
+case class ChiselCircuitAnnotation(circuit: Circuit) extends NoTargetAnnotation with ChiselOption with Unserializable {
   /* Caching the hashCode for a large circuit is necessary due to repeated queries.
    * Not caching the hashCode will cause severe performance degredations for large [[Circuit]]s.
    */
@@ -109,6 +214,10 @@ object CircuitSerializationAnnotation {
   case object FirrtlFileFormat extends Format {
     def extension = ".fir"
   }
+  @deprecated(
+    deprecatedMFCMessage + " Protobuf emission is deprecated and the MFC does not support reading Protobuf. Please switch to FIRRTL text emission.",
+    "Chisel 3.6"
+  )
   case object ProtoBufFileFormat extends Format {
     def extension = ".pb"
   }
@@ -116,7 +225,7 @@ object CircuitSerializationAnnotation {
 
 import CircuitSerializationAnnotation._
 
-/** Wraps a [[Circuit]] for serialization via [[CustomFileEmission]]
+/** Wraps a `Circuit` for serialization via `CustomFileEmission`
   * @param circuit a Chisel Circuit
   * @param filename name of destination file (excludes file extension)
   * @param format serialization file format (sets file extension)
@@ -135,8 +244,9 @@ case class CircuitSerializationAnnotation(circuit: Circuit, filename: String, fo
 
   override def getBytesBuffered: Iterable[Array[Byte]] = format match {
     case FirrtlFileFormat =>
-      OldEmitter.emitLazily(circuit)
-                .map(_.getBytes)
+      OldEmitter
+        .emitLazily(circuit)
+        .map(_.getBytes)
     // TODO Use lazy Iterables so that we don't have to materialize full intermediate data structures
     case ProtoBufFileFormat =>
       val ostream = new java.io.ByteArrayOutputStream
@@ -155,7 +265,9 @@ object ChiselOutputFileAnnotation extends HasShellOptions {
       longOption = "chisel-output-file",
       toAnnotationSeq = (a: String) => Seq(ChiselOutputFileAnnotation(a)),
       helpText = "Write Chisel-generated FIRRTL to this file (default: <circuit-main>.fir)",
-      helpValueName = Some("<file>") ) )
+      helpValueName = Some("<file>")
+    )
+  )
 
 }
 

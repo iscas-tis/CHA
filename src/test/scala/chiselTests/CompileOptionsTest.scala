@@ -4,8 +4,11 @@ package chiselTests
 
 import chisel3._
 import chisel3.CompileOptions._
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 
+import scala.annotation.nowarn
+
+@nowarn("msg=Chisel compatibility mode is deprecated")
 class CompileOptionsSpec extends ChiselFlatSpec with Utils {
 
   abstract class StrictModule extends Module()(chisel3.ExplicitCompileOptions.Strict)
@@ -14,15 +17,13 @@ class CompileOptionsSpec extends ChiselFlatSpec with Utils {
   class SmallBundle extends Bundle {
     val f1 = UInt(4.W)
     val f2 = UInt(5.W)
-    override def cloneType: this.type = (new SmallBundle).asInstanceOf[this.type]
   }
   class BigBundle extends SmallBundle {
     val f3 = UInt(6.W)
-    override def cloneType: this.type = (new BigBundle).asInstanceOf[this.type]
   }
 
   "A Module with missing bundle fields when compiled with implicit Strict.CompileOption " should "throw an exception" in {
-    a [ChiselException] should be thrownBy extractCause[ChiselException] {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
       import chisel3.ExplicitCompileOptions.Strict
 
       class ConnectFieldMismatchModule extends Module {
@@ -50,7 +51,7 @@ class CompileOptionsSpec extends ChiselFlatSpec with Utils {
   }
 
   "A Module in which a Reg is created with a bound type when compiled with implicit Strict.CompileOption " should "throw an exception" in {
-    a [BindingException] should be thrownBy extractCause[BindingException] {
+    a[BindingException] should be thrownBy extractCause[BindingException] {
       import chisel3.ExplicitCompileOptions.Strict
 
       class CreateRegFromBoundTypeModule extends Module {
@@ -91,7 +92,7 @@ class CompileOptionsSpec extends ChiselFlatSpec with Utils {
   }
 
   "A Module with unwrapped IO when compiled with implicit Strict.CompileOption " should "throw an exception" in {
-    a [BindingException] should be thrownBy extractCause[BindingException] {
+    a[BindingException] should be thrownBy extractCause[BindingException] {
       import chisel3.ExplicitCompileOptions.Strict
 
       class RequireIOWrapModule extends Module {
@@ -108,7 +109,7 @@ class CompileOptionsSpec extends ChiselFlatSpec with Utils {
   }
 
   "A Module connecting output as source to input as sink when compiled with implicit Strict.CompileOption " should "throw an exception" in {
-    a [ChiselException] should be thrownBy extractCause[ChiselException] {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
       import chisel3.ExplicitCompileOptions.Strict
 
       class SimpleModule extends Module {
@@ -142,7 +143,7 @@ class CompileOptionsSpec extends ChiselFlatSpec with Utils {
   }
 
   "A Module with directionless connections when compiled with implicit Strict.CompileOption " should "throw an exception" in {
-    a [ChiselException] should be thrownBy extractCause[ChiselException] {
+    a[ChiselException] should be thrownBy extractCause[ChiselException] {
       // Verify we can suppress the inclusion of default compileOptions
       import Chisel.{defaultCompileOptions => _}
       import chisel3.ExplicitCompileOptions.Strict
@@ -163,6 +164,34 @@ class CompileOptionsSpec extends ChiselFlatSpec with Utils {
       }
       ChiselStage.elaborate { new DirectionLessConnectionModule() }
     }
+  }
+
+  "Strict.copy()" should "be equivalent in all CompileOptions traits" in {
+    import chisel3.ExplicitCompileOptions.Strict
+    val copiedCompileOptions = Strict.copy()
+    assert(copiedCompileOptions.connectFieldsMustMatch == Strict.connectFieldsMustMatch)
+    assert(copiedCompileOptions.declaredTypeMustBeUnbound == Strict.declaredTypeMustBeUnbound)
+    assert(copiedCompileOptions.dontTryConnectionsSwapped == Strict.dontTryConnectionsSwapped)
+    assert(copiedCompileOptions.dontAssumeDirectionality == Strict.dontAssumeDirectionality)
+    assert(copiedCompileOptions.checkSynthesizable == Strict.checkSynthesizable)
+    assert(copiedCompileOptions.explicitInvalidate == Strict.explicitInvalidate)
+    assert(copiedCompileOptions.inferModuleReset == Strict.inferModuleReset)
+    assert(copiedCompileOptions.migrateInferModuleReset == Strict.migrateInferModuleReset)
+    assert(copiedCompileOptions.emitStrictConnects == Strict.emitStrictConnects)
+  }
+
+  "NotStrict.copy()" should "be equivalent in all CompileOptions traits" in {
+    import chisel3.ExplicitCompileOptions.NotStrict
+    val copiedCompileOptions = NotStrict.copy()
+    assert(copiedCompileOptions.connectFieldsMustMatch == NotStrict.connectFieldsMustMatch)
+    assert(copiedCompileOptions.declaredTypeMustBeUnbound == NotStrict.declaredTypeMustBeUnbound)
+    assert(copiedCompileOptions.dontTryConnectionsSwapped == NotStrict.dontTryConnectionsSwapped)
+    assert(copiedCompileOptions.dontAssumeDirectionality == NotStrict.dontAssumeDirectionality)
+    assert(copiedCompileOptions.checkSynthesizable == NotStrict.checkSynthesizable)
+    assert(copiedCompileOptions.explicitInvalidate == NotStrict.explicitInvalidate)
+    assert(copiedCompileOptions.inferModuleReset == NotStrict.inferModuleReset)
+    assert(copiedCompileOptions.migrateInferModuleReset == NotStrict.migrateInferModuleReset)
+    assert(copiedCompileOptions.emitStrictConnects == NotStrict.emitStrictConnects)
   }
 
 }

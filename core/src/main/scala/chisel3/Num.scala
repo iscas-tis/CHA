@@ -2,12 +2,10 @@
 
 package chisel3
 
-import chisel3.internal.ChiselException
 import chisel3.internal.firrtl.{BinaryPoint, KnownBinaryPoint}
-
+import chisel3.internal.sourceinfo.SourceInfoTransform
 import scala.language.experimental.macros
-import chisel3.internal.sourceinfo.{SourceInfo, SourceInfoTransform}
-
+import chisel3.experimental.SourceInfo
 
 // REVIEW TODO: Further discussion needed on what Num actually is.
 
@@ -32,7 +30,7 @@ trait Num[T <: Data] {
   self: Num[T] =>
   // def << (b: T): T
   // def >> (b: T): T
-  //def unary_-(): T
+  //def unary_-: T
 
   // REVIEW TODO: double check ops conventions against FIRRTL
 
@@ -43,10 +41,10 @@ trait Num[T <: Data] {
     * $maxWidth
     * @group Arithmetic
     */
-  final def + (that: T): T = macro SourceInfoTransform.thatArg
+  final def +(that: T): T = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_+ (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
+  def do_+(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
 
   /** Multiplication operator
     *
@@ -56,10 +54,10 @@ trait Num[T <: Data] {
     * $singleCycleMul
     * @group Arithmetic
     */
-  final def * (that: T): T = macro SourceInfoTransform.thatArg
+  final def *(that: T): T = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_* (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
+  def do_*(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
 
   /** Division operator
     *
@@ -69,10 +67,10 @@ trait Num[T <: Data] {
     * @todo full rules
     * @group Arithmetic
     */
-  final def / (that: T): T = macro SourceInfoTransform.thatArg
+  final def /(that: T): T = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_/ (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
+  def do_/(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
 
   /** Modulo operator
     *
@@ -81,10 +79,10 @@ trait Num[T <: Data] {
     * $singleCycleDiv
     * @group Arithmetic
     */
-  final def % (that: T): T = macro SourceInfoTransform.thatArg
+  final def %(that: T): T = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_% (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
+  def do_%(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
 
   /** Subtraction operator
     *
@@ -93,10 +91,10 @@ trait Num[T <: Data] {
     * $maxWidthPlusOne
     * @group Arithmetic
     */
-  final def - (that: T): T = macro SourceInfoTransform.thatArg
+  final def -(that: T): T = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_- (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
+  def do_-(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
 
   /** Less than operator
     *
@@ -104,10 +102,10 @@ trait Num[T <: Data] {
     * @return a hardware [[Bool]] asserted if this $coll is less than `that`
     * @group Comparison
     */
-  final def < (that: T): Bool = macro SourceInfoTransform.thatArg
+  final def <(that: T): Bool = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_< (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
+  def do_<(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
 
   /** Less than or equal to operator
     *
@@ -115,10 +113,10 @@ trait Num[T <: Data] {
     * @return a hardware [[Bool]] asserted if this $coll is less than or equal to `that`
     * @group Comparison
     */
-  final def <= (that: T): Bool = macro SourceInfoTransform.thatArg
+  final def <=(that: T): Bool = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_<= (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
+  def do_<=(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
 
   /** Greater than operator
     *
@@ -126,10 +124,10 @@ trait Num[T <: Data] {
     * @return a hardware [[Bool]] asserted if this $coll is greater than `that`
     * @group Comparison
     */
-  final def > (that: T): Bool = macro SourceInfoTransform.thatArg
+  final def >(that: T): Bool = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_> (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
+  def do_>(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
 
   /** Greater than or equal to operator
     *
@@ -137,10 +135,10 @@ trait Num[T <: Data] {
     * @return a hardware [[Bool]] asserted if this $coll is greather than or equal to `that`
     * @group Comparison
     */
-  final def >= (that: T): Bool = macro SourceInfoTransform.thatArg
+  final def >=(that: T): Bool = macro SourceInfoTransform.thatArg
 
   /** @group SourceInfoTransformMacro */
-  def do_>= (that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
+  def do_>=(that: T)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): Bool
 
   /** Absolute value operator
     *
@@ -148,7 +146,7 @@ trait Num[T <: Data] {
     * $unchangedWidth
     * @group Arithmetic
     */
-  final def abs(): T = macro SourceInfoTransform.noArg
+  final def abs: T = macro SourceInfoTransform.noArg
 
   /** @group SourceInfoTransformMacro */
   def do_abs(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): T
@@ -186,7 +184,6 @@ object Num extends NumObject
   * BigInts and Double and BigDecimal
   * For backwards compatibility this is used with FixedPoint and Interval objects
   * but is better used with the Num Object
-  *
   */
 trait NumObject {
   val MaxBitsBigIntToBigDecimal = 108
@@ -251,7 +248,7 @@ trait NumObject {
     * @return
     */
   def toDouble(i: BigInt, binaryPoint: Int): Double = {
-    if(i.bitLength >= 54) {
+    if (i.bitLength >= 54) {
       throw new ChiselException(
         s"BigInt $i with bitlength ${i.bitLength} is too big, precision lost with > $MaxBitsBigIntToDouble bits"
       )
@@ -272,7 +269,8 @@ trait NumObject {
       case KnownBinaryPoint(n) => toDouble(value, n)
       case x =>
         throw new ChiselException(s"Error converting BigDecimal $value to BigInt, binary point must be known, not $x")
-    }  }
+    }
+  }
 
   /**
     * converts a bigInt with the given binaryPoint into the BigDecimal representation
@@ -281,7 +279,7 @@ trait NumObject {
     * @return
     */
   def toBigDecimal(value: BigInt, binaryPoint: Int): BigDecimal = {
-    if(value.bitLength > MaxBitsBigIntToBigDecimal) {
+    if (value.bitLength > MaxBitsBigIntToBigDecimal) {
       throw new ChiselException(
         s"BigInt $value with bitlength ${value.bitLength} is too big, precision lost with > $MaxBitsBigIntToBigDecimal bits"
       )

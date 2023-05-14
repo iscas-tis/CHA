@@ -3,8 +3,8 @@
 package chiselTests
 
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.testers.BasicTester
+import circt.stage.ChiselStage
 
 class OptionBundle(val hasIn: Boolean) extends Bundle {
   val in = if (hasIn) {
@@ -55,7 +55,7 @@ class OptionBundleSpec extends ChiselFlatSpec with Utils {
   }
 
   "A Bundle with an Option field" should "assert out accessing a None Option field" in {
-    a [Exception] should be thrownBy extractCause[Exception] {
+    a[Exception] should be thrownBy extractCause[Exception] {
       ChiselStage.elaborate { new InvalidOptionBundleTester() }
     }
   }
