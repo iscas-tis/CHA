@@ -12,7 +12,7 @@ lazy val commonSettings = Seq(
   resolvers ++= Resolver.sonatypeOssRepos("snapshots"),
   resolvers ++= Resolver.sonatypeOssRepos("releases"),
   organization := "edu.berkeley.cs",
-  version := "3.7-SNAPSHOT",
+  version := "3.6-SNAPSHOT",
   autoAPIMappings := true,
   scalaVersion := "2.13.10",
   crossScalaVersions := Seq("2.13.10", "2.12.17"),
@@ -80,7 +80,7 @@ lazy val publishSettings = Seq(
       </developer>
     </developers>,
   publishTo := {
-    val v = version.value
+    val v = "3.7-SNAPSHOT"
     val nexus = "https://oss.sonatype.org/"
     if (v.trim.endsWith("SNAPSHOT")) {
       Some("snapshots".at(nexus + "content/repositories/snapshots"))

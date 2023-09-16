@@ -294,7 +294,7 @@ private[chisel3] object Converter {
       }
     }
     assert(scope.isEmpty)
-    println(s"Let's see: ${fir.Block(stmts.result())}")
+    // println(s"Let's see: ${fir.Block(stmts.result())}")
     fir.Block(stmts.result())
   }
 
