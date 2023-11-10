@@ -1,9 +1,11 @@
 // See README.md for license details.
 
-package testSVA.GCD
+package testCHA.GCD
 
 import chisel3._
 import chisel3.util.Decoupled
+import chiseltest.formal._
+import chiseltest.formal.chaAnno._
 
 class GcdInputBundle(val w: Int) extends Bundle {
   val value1 = UInt(w.W)
@@ -74,4 +76,26 @@ class DecoupledGcd(val bitWidth: Int) extends Module {
       busy := true.B
     }
   }
+  // val nBusy = !busy
+  // val temp = output.valid
+  // chaAssert(this,"busy |-> ##[1:15] nBusy") 
+  // chaAssert(this,"busy |-> ##[1:16] nBusy") 
 }
+
+// class DecoupledGcd_4() extends Module
+// {
+//   val input = IO(Flipped(Decoupled(new GcdInputBundle(4))))
+//   val output = IO(Decoupled(new GcdOutputBundle(4)))
+//   val s1 = Module(new DecoupledGcd(4))
+//   output.bits.value1 := s1.output.bits.value1
+//   input.ready := s1.input.ready
+//   output.bits.gcd := s1.output.bits.gcd
+//   output.valid := s1.output.valid
+//   s1.input.valid := input.valid
+//   output.bits.value2 :=  s1.output.bits.value2
+//   s1.output.ready := output.ready
+//   s1.input.bits.value2 := input.bits.value2
+//   s1.input.bits.value1 := input.bits.value1
+//   // s1.input := input
+//   // input
+// }
