@@ -69,14 +69,18 @@ class Counter(width: Int) extends Module {
   
   val bs = countReg(0)
   val ts = countReg(3)
-  assert(countReg(0))
-  chaAssert(this,"bs |-> ##[0:8] ts") 
-  chaAssert(this, "G (bs ##[1:$] ts)[*2:3] U (X (bs |-> F ts))")
-
+  // assert(countReg(0))
+  chaAssume(this,"(X bs U ts) || G ts") 
+  chaAssert(this,"(X bs U ts) || G ts") 
+  // chaAssert(this, "G (bs ##[1:$] ts)[*2:3] U (X (bs |-> F ts))")
+  // chaAssert(this, "bs ##[2:3] ts ##[1:-1] ts[*2:3] |=> bs U ts")
+  // chaAssert(this, "G ts |=> bs")
+  // chaAssert(this, "G ts U bs U ts")
+  // chaAssert(this, "G F (ts U bs) U ts")
 //   chaAssert(this,this.reset,"countReg")
 
 //   chaAssert(this,this.reset,"countReg(0)")
-//   chaAssert(this.reset, ap(countReg(0)) ###(2,3) (ap(countReg(1)) ###(1,-1) ap(countReg(1)))*(2,3))
+// chaAssert(this.reset, ap(countReg(0)) ###(2,3) (ap(countReg(1)) ###(1,-1) ap(countReg(1)))*(2,3))
 //   chaAssert(this.reset, countReg(0) ###(1,-1) countReg(1))
 //   chaAssert(this.reset, ap(countReg(0)) )
 //   chaAssert(this.reset, ap(countReg(0)) ###(1,-1) )
