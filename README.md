@@ -63,8 +63,7 @@ The stable version is at `testSVA` branch, from the root directory configure and
 git clone https://github.com/iscas-tis/CHA.git
 cd chisel3
 git checkout testSVA
-git submodule init
-git submodule update --remote
+git submodule update --init
 ```
 
 ## Usage
@@ -77,27 +76,20 @@ For local DUT Chisel project, you must publish local version of Chiseltest, FIRR
 # publish local version of Chiseltest, firrtl, Chisel
 
 cd chiseltest
-sbt
-    %in sbt 
-    publishLocal
-    exit
+sbt publishLocal
 cd ../firrtl
-sbt
-    publishLocal
-    exit
+sbt publishLocal
 cd ../
-sbt
-    publishLocal
-    exit
+sbt publishLocal
 ```
 
 2. Modify dependency of local DUT Chisel project
 
 ```
 update libraryDependencies in build.sbt as
-"edu.berkeley.cs" %% "chisel3" % "3.7-SNAPSHOT",
-"edu.berkeley.cs" %% "chiseltest" % "0.7-SNAPSHOT" % "test",
-"edu.berkeley.cs" %% "firrtl" % "1.6-SNAPSHOT",
+"cn.ac.ios.tis" %% "chisel3" % "3.7-SNAPSHOT",
+"cn.ac.ios.tis" %% "chiseltest" % "0.7-SNAPSHOT" % "test",
+"cn.ac.ios.tis" %% "firrtl" % "1.6-SNAPSHOT",
 ```
 
 3. Add necessary lib
@@ -189,7 +181,7 @@ p := s | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p | |-p-|
 
 #### Sequence Operators
 
-| Name | boolean sequence | sequence fusion | sequence concatenation | sequence disjunction | zero repetition | intervals |
+| Name  | boolean sequence | sequence fusion | sequence concatenation | sequence disjunction | zero repetition | intervals |
 | :---: | :--------------: | :-------------: | :--------------------: | :------------------: | :-------------: | :-------: |
 |  SVA  |        u         |       ##0       |          ##1           |          or          |      [*0]       |  [*1:$]   |
 |  CHA  |      ap(u)       |     ###(0)      |         ###(1)         |          \|          |      *(0)       |  *(1:$)   |
