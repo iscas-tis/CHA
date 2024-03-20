@@ -150,7 +150,8 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
    ![image-20220704102342059](https://tva1.sinaimg.cn/large/e6c9d24ely1h3uollfw8wj217o0420uw.jpg)
 
 ## Verification of Cache design in Nutshell
- We apply our tool in the cache design of Nutshell. By "assume-guarantee" reasoning, we add some assumptions and assistant assertions to prove the "requst-response" property of the cache. (Inserted temporal properties are in https://github.com/log-when/NutShell/blob/master/src/test/scala/cha/cache/CacheTest.scala) 
+ We apply our tool in the cache design of Nutshell. By "assume-guarantee" reasoning, we add some assumptions and assistant assertions to prove the "requst-response" property of the cache. 
+ (Inserted temporal properties are in https://github.com/log-when/NutShell/blob/master/src/test/scala/cha/cache/CacheTest.scala) 
 
 ## The CHA Format
 
