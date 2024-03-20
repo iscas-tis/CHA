@@ -62,7 +62,7 @@ The stable version is at `testSVA` branch, from the root directory configure and
 # Download
 git clone https://github.com/iscas-tis/CHA.git
 cd chisel3
-git checkout testSVA
+git checkout testCHA
 git submodule update --init
 ```
 
@@ -156,27 +156,25 @@ Here is an example test of GCD. For a 4-bit GCD project, we can verify that the 
 ## The CHA Format
 
 #### Sequence Format 
-Note that "|-" and "-|" denotes the left parenthesis and right parenthesis.
 
 ```
-s := ap(u) | s ###0(s) | s ###1(s)| s*(0)| s*(1.-1) | |-s-|
-ap ::= boolean sequence
-###(0) ::= sequence fusion
-###(1) ::= sequence concatenation
-*(0) ::= zero repetition
-*(1,-1) ::= intervals
+s := u | (s) | s ##m s | s ##[m:n] s | s | s | s[*m] | s[*m:n]
+u ::= boolean expression
+## ::= sequence fusion/concatenation
+[*] ::= repetition
+
 ```
 
 For example:
 
 ```
-ap(busy) |->  ###(1,15) ap(!busy)
+##[1:15] nBusy
 ```
 
 #### Property Format
 
 ```
-p := s | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p | |-p-|
+p := s | (p) | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p 
 ```
 
 #### Sequence Operators
@@ -184,14 +182,12 @@ p := s | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p | |-p-|
 | Name  | boolean sequence | sequence fusion | sequence concatenation | sequence disjunction | zero repetition | intervals |
 | :---: | :--------------: | :-------------: | :--------------------: | :------------------: | :-------------: | :-------: |
 |  SVA  |        u         |       ##0       |          ##1           |          or          |      [*0]       |  [*1:$]   |
-|  CHA  |      ap(u)       |     ###(0)      |         ###(1)         |          \|          |      *(0)       |  *(1:$)   |
+|  SVA  |        u         |       ##0       |          ##1           |           |          |      [*0]       |  [*1:$]   |
 
 #### Property Operators
 
 | Name. | suffix implication | property negation | property conjunction | property disjunction | nexttime property | always property | s_eventually property | until property |
 | :---: | :----------------: | :---------------: | :------------------: | :------------------: | :---------------: | :-------------: | :-------------------: | :------------: |
-|  SVA  |        \|->        |        not        |         and          |          or          |     nexttime      |     always      |     s_eventually      |     until      |
+|  SVA  |        \|->        |        not        |         and          |          or          |   s_nexttime      |     always      |     s_eventually      |     until      |
 |  CHA  |        \|->        |         !         |          &&          |         \|\|         |         X         |        G        |           F           |       U        |
 
-### Syntax and Semantics of Sequence and Property Formulas 
-Details about syntax and semantics of our formulas are avaiable in [Syntax and Semantics of Sequence and Property Formulas.pdf](https://github.com/iscas-tis/CHA/blob/testSVA/Syntax%20and%20Semantics%20of%20Sequence%20and%20Property%20Formulas.pdf)
