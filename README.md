@@ -183,7 +183,7 @@ p := s | (p) | s|->p | !p | Gp | Fp | Xp | p U p | p||p | p&&p
 | Name  | boolean sequence | sequence fusion | sequence concatenation | sequence disjunction | zero repetition | intervals |
 | :---: | :--------------: | :-------------: | :--------------------: | :------------------: | :-------------: | :-------: |
 |  SVA  |        u         |       ##0       |          ##1           |          or          |      [*0]       |  [*1:$]   |
-|  SVA  |        u         |       ##0       |          ##1           |           |          |      [*0]       |  [*1:$]   |
+|  CHA  |        u         |       ##0       |          ##1           |          \|          |      [*0]       |  [*1:$]   |
 
 #### Property Operators
 
